@@ -44,11 +44,17 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useCreateSaleMutation } from "../redux/features/management/saleApi";
-import CartModal, {
+import { CartModal } from "../components/modal"; // Updated import
+
+// Import types from CartModal
+import {
   CartItem,
   PaymentDetails,
   BulkSalePayload,
-} from "../components/modal/CartModal";
+  PaymentSplit,
+  PAYMENT_METHODS,
+  PaymentMethodType
+} from "../components/modal/cartModal/types"; // Import from types file
 
 const { Option } = Select;
 const { useForm } = Form;
@@ -79,6 +85,8 @@ const ProductSellingPage = () => {
   const [isProcessingBulkSale, setIsProcessingBulkSale] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout>();
 
+  
+
   // ✅ Define the function FIRST
   const getMerkatoStock = useCallback((product: IProduct): number => {
     if (product.warehouse !== Warehouse.MERKATO) {
@@ -103,7 +111,7 @@ const ProductSellingPage = () => {
 
   // Helper function for payment detail changes
   const handlePaymentDetailChange = useCallback(
-    (field: keyof PaymentDetails, value: string | number) => {
+    (field: keyof PaymentDetails, value: string | number | null) => {
       setPaymentDetails((prev) => ({
         ...prev,
         [field]: value,
@@ -175,46 +183,46 @@ const ProductSellingPage = () => {
 
   // Add product to cart
   const addToCart = useCallback((product: any) => {
-  // Get the actual product from allProducts to ensure we have the latest data
-  const fullProduct = allProducts.find(p => p.id === product.id);
-  if (!fullProduct) return;
+    // Get the actual product from allProducts to ensure we have the latest data
+    const fullProduct = allProducts.find(p => p.id === product.id);
+    if (!fullProduct) return;
 
-  const stock = getMerkatoStock(fullProduct);
-  const qtyPerCarton = fullProduct.qty || 1;
-  const cartonCount = Math.floor(stock / qtyPerCarton);
-  
-  console.log('Adding to cart:', {
-    product: fullProduct.name,
-    stock,
-    qtyPerCarton,
-    cartonCount,
-    ctn: (fullProduct as any).ctn,
-    qty: fullProduct.qty
-  });
-  
-  const existingItem = cart.find(item => item.id === fullProduct.id);
-  if (existingItem) {
-    message.warning(`${fullProduct.name} is already in the cart`);
-    return;
-  }
-  
-  setCart(prev => [...prev, {
-    id: fullProduct.id,
-    code: fullProduct.code || '',
-    name: fullProduct.name || '',
-    price: fullProduct.price || 0,
-    qtyPerCarton,
-    availableStock: stock, // This should be the total pieces
-    availableCartons: cartonCount, // This should be total cartons
-    quantity: 1,
-    useCustomPrice: false,
-    customPrice: fullProduct.price || 0,
-    allowNegativeStock: false,
-    unit: fullProduct.unit || 'PC'
-  }]);
-  
-  message.success(`${fullProduct.name} added to cart`);
-}, [cart, getMerkatoStock, allProducts]);
+    const stock = getMerkatoStock(fullProduct);
+    const qtyPerCarton = fullProduct.qty || 1;
+    const cartonCount = Math.floor(stock / qtyPerCarton);
+    
+    console.log('Adding to cart:', {
+      product: fullProduct.name,
+      stock,
+      qtyPerCarton,
+      cartonCount,
+      ctn: (fullProduct as any).ctn,
+      qty: fullProduct.qty
+    });
+    
+    const existingItem = cart.find(item => item.id === fullProduct.id);
+    if (existingItem) {
+      message.warning(`${fullProduct.name} is already in the cart`);
+      return;
+    }
+    
+    setCart(prev => [...prev, {
+      id: fullProduct.id,
+      code: fullProduct.code || '',
+      name: fullProduct.name || '',
+      price: fullProduct.price || 0,
+      qtyPerCarton,
+      availableStock: stock, // This should be the total pieces
+      availableCartons: cartonCount, // This should be total cartons
+      quantity: 1,
+      useCustomPrice: false,
+      customPrice: fullProduct.price || 0,
+      allowNegativeStock: false,
+      unit: fullProduct.unit || 'PC'
+    }]);
+    
+    message.success(`${fullProduct.name} added to cart`);
+  }, [cart, getMerkatoStock, allProducts]);
 
   // Update cart item
   const updateCartItem = useCallback(
@@ -245,6 +253,10 @@ const ProductSellingPage = () => {
       message.info("Cart cleared");
     }
     setCart([]);
+    // Also reset payment details when clearing cart
+    setPaymentDetails({});
+    setPaymentMethod("");
+    setCurrentBuyer("");
   }, [cart.length]);
 
   // Calculate cart total
@@ -261,20 +273,264 @@ const ProductSellingPage = () => {
   const calculateTotalCartItems = useCallback(() => {
     return cart.reduce((total, item) => total + item.quantity, 0);
   }, [cart]);
+//   const handleBulkSale = async (salesData: BulkSalePayload[]) => {
+//     let successCount = 0;
+//     let failedCount = 0;
 
-  // Handle bulk sale
-  const handleBulkSale = async (salesData: BulkSalePayload[]) => {
-    let successCount = 0;
-    let failedCount = 0;
+//     setIsProcessingBulkSale(true);
 
-    setIsProcessingBulkSale(true);
+//   try {
+//     // Generate unique split IDs for each item
+//         const salesDataWithUniqueSplits = salesData.map((sale, index) => {
+//           if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+//             // Generate unique split IDs for each item
+//             const uniqueSplits = sale.paymentSplits.map(split => ({
+//               ...split,
+//               id: `split_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`
+//             }));
+            
+//             return {
+//               ...sale,
+//               paymentSplits: uniqueSplits
+//             };
+//           }
+//           return sale;
+//         });
+//         // Call the existing createSale endpoint for each sale
+//         // OR create a new bulk endpoint
+//         for (const sale of salesData) {
+//             try {
+//                 const payload: any = {
+//                     buyerName: sale.buyerName,
+//                     casherName: sale.casherName,
+//                     date: sale.date,
+//                     paymentMethod: sale.paymentMethod,
+//                     code: sale.code,
+//                     ctn: sale.ctn,
+//                     productPrice: sale.productPrice,
+//                     productName: sale.name,
+//                     useCustomPrice: sale.useCustomPrice,
+//                     allowNegativeStock: sale.allowNegativeStock,
+//                     paidAmount: sale.paidAmount,
+//                     remainingAmount: sale.remainingAmount,
+//                     totalAmount: sale.totalAmount,
+//                 };
 
-    try {
-      const totalCartAmount = salesData.reduce((sum, sale) => sum + sale.totalAmount, 0);
-      const paidAmount = salesData[0]?.paidAmount || 0;
-      for (const sale of salesData) {
-        try {
-          const payload: any = {
+//                 // Add custom price if used
+//                 if (sale.useCustomPrice && sale.customPricePerPiece) {
+//                     payload.customPricePerPiece = sale.customPricePerPiece;
+//                 }
+
+//                 // Include payment details
+//                 if (sale.paymentMethod === "BANK_TRANSFER") {
+//                     if (sale.bankName) payload.bankName = sale.bankName;
+//                     if (sale.senderName) payload.senderName = sale.senderName;
+//                     if (sale.receiverName) payload.receiverName = sale.receiverName;
+//                 }
+
+//                 if (sale.paymentMethod === "TELEBIRR") {
+//                     if (sale.telebirrPhone) payload.telebirrPhone = sale.telebirrPhone;
+//                     if (sale.telebirrTransactionId)
+//                         payload.telebirrTransactionId = sale.telebirrTransactionId;
+//                     if (sale.receiverName) payload.receiverName = sale.receiverName;
+//                 }
+
+//                 if (sale.paymentMethod === 'PARTIAL') {
+//                     // ... existing partial payment logic ...
+//                 }
+
+//                 if (sale.paymentMethod === "OTHER") {
+//                     if (sale.otherMethod) payload.otherMethod = sale.otherMethod;
+//                     if (sale.otherReference)
+//                         payload.otherReference = sale.otherReference;
+//                     if (sale.receiverName) payload.receiverName = sale.receiverName;
+//                 }
+
+//                 // Handle SPLIT payments
+//                 if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+//                     // Store split payment details in notes or a dedicated field
+//                     const splitSummary = sale.paymentSplits.map(split => 
+//                         `${split.method}: $${split.amount.toFixed(2)} (${split.percentage.toFixed(1)}%)`
+//                     ).join('; ');
+                    
+//                     payload.notes = `SPLIT PAYMENT: ${splitSummary}`;
+                    
+//                     // For now, we'll use PARTIAL as the payment method but store split details
+//                     // Or add a new field if your backend supports it
+//                     payload.paymentSplits = sale.paymentSplits;
+//                 }
+
+//                 await createSale(payload).unwrap();
+//                 successCount++;
+//             } catch (error: any) {
+//                 console.error(`Failed to sell ${sale.name}:`, error);
+//                 message.error(
+//                     `${sale.name}: ${error?.data?.message || "Failed to sell"}`
+//                 );
+//                 failedCount++;
+//             }
+//         }
+
+//         if (successCount > 0) {
+//             message.success(`Successfully processed ${successCount} items, ${failedCount} failed`);
+//         }
+
+//         return { successCount, failedCount };
+//     } catch (error) {
+//         console.error("Bulk sale error:", error);
+//         return { successCount, failedCount: salesData.length };
+//     } finally {
+//         setIsProcessingBulkSale(false);
+//     }
+// };
+  // Data processing
+//   const handleBulkSale = async (salesData: BulkSalePayload[]) => {
+//   let successCount = 0;
+//   let failedCount = 0;
+
+//   setIsProcessingBulkSale(true);
+
+//   try {
+//     // Generate unique split IDs for each item
+//     const salesDataWithUniqueSplits = salesData.map((sale, index) => {
+//       if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+//         // Generate unique split IDs for each item
+//         const uniqueSplits = sale.paymentSplits.map(split => ({
+//           ...split,
+//           id: `split_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`
+//         }));
+        
+//         return {
+//           ...sale,
+//           paymentSplits: uniqueSplits
+//         };
+//       }
+//       return sale;
+//     });
+
+//     // Process each sale with unique splits
+//     for (const sale of salesDataWithUniqueSplits) {
+//       try {
+//         const payload: any = {
+//           buyerName: sale.buyerName,
+//           casherName: sale.casherName,
+//           date: sale.date,
+//           paymentMethod: sale.paymentMethod,
+//           code: sale.code,
+//           ctn: sale.ctn,
+//           productPrice: sale.productPrice,
+//           productName: sale.name,
+//           useCustomPrice: sale.useCustomPrice,
+//           allowNegativeStock: sale.allowNegativeStock,
+//           paidAmount: sale.paidAmount,
+//           remainingAmount: sale.remainingAmount,
+//           totalAmount: sale.totalAmount,
+//         };
+
+//         // Add custom price if used
+//         if (sale.useCustomPrice && sale.customPricePerPiece) {
+//           payload.customPricePerPiece = sale.customPricePerPiece;
+//         }
+
+//         // Include payment details
+//         if (sale.paymentMethod === "BANK_TRANSFER") {
+//           if (sale.bankName) payload.bankName = sale.bankName;
+//           if (sale.senderName) payload.senderName = sale.senderName;
+//           if (sale.receiverName) payload.receiverName = sale.receiverName;
+//         }
+
+//         if (sale.paymentMethod === "TELEBIRR") {
+//           if (sale.telebirrPhone) payload.telebirrPhone = sale.telebirrPhone;
+//           if (sale.telebirrTransactionId)
+//             payload.telebirrTransactionId = sale.telebirrTransactionId;
+//           if (sale.receiverName) payload.receiverName = sale.receiverName;
+//         }
+
+//         if (sale.paymentMethod === 'PARTIAL') {
+//           // ... existing partial payment logic ...
+//         }
+
+//         if (sale.paymentMethod === "OTHER") {
+//           if (sale.otherMethod) payload.otherMethod = sale.otherMethod;
+//           if (sale.otherReference)
+//             payload.otherReference = sale.otherReference;
+//           if (sale.receiverName) payload.receiverName = sale.receiverName;
+//         }
+
+//         // Handle SPLIT payments
+//         if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+//           // Create summary for notes
+//           const splitSummary = sale.paymentSplits.map(split => 
+//             `${split.method}: $${split.amount.toFixed(2)} (${split.percentage.toFixed(1)}%)`
+//           ).join('; ');
+          
+//           payload.notes = `SPLIT PAYMENT: ${splitSummary}`;
+          
+//           // Include the actual split data
+//           payload.paymentSplits = sale.paymentSplits;
+//         }
+
+//         console.log(`Creating sale for ${sale.name} with payload:`, payload);
+//         await createSale(payload).unwrap();
+//         successCount++;
+        
+//         // Small delay between requests to avoid overwhelming the server
+//         await new Promise(resolve => setTimeout(resolve, 100));
+        
+//       } catch (error: any) {
+//         console.error(`Failed to sell ${sale.name}:`, error);
+//         message.error(
+//           `${sale.name}: ${error?.data?.message || "Failed to sell"}`
+//         );
+//         failedCount++;
+//       }
+//     }
+
+//     if (successCount > 0) {
+//       message.success(`Successfully processed ${successCount} items, ${failedCount} failed`);
+      
+//       // Clear cart only if all items were successfully processed
+//       if (failedCount === 0) {
+//         clearCart();
+//       }
+//     }
+
+//     return { successCount, failedCount };
+//   } catch (error) {
+//     console.error("Bulk sale error:", error);
+//     return { successCount, failedCount: salesData.length };
+//   } finally {
+//     setIsProcessingBulkSale(false);
+//   }
+// };
+const handleBulkSale = async (salesData: BulkSalePayload[]) => {
+  let successCount = 0;
+  let failedCount = 0;
+
+  setIsProcessingBulkSale(true);
+
+  try {
+    // Generate unique split IDs for each item
+    const salesDataWithUniqueSplits = salesData.map((sale, index) => {
+      if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+        // Generate unique split IDs for each item
+        const uniqueSplits = sale.paymentSplits.map(split => ({
+          ...split,
+          id: `split_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`
+        }));
+        
+        return {
+          ...sale,
+          paymentSplits: uniqueSplits
+        };
+      }
+      return sale;
+    });
+
+    // Process each sale with unique splits
+    for (const sale of salesDataWithUniqueSplits) {
+      try {
+        const payload: any = {
           buyerName: sale.buyerName,
           casherName: sale.casherName,
           date: sale.date,
@@ -285,104 +541,104 @@ const ProductSellingPage = () => {
           productName: sale.name,
           useCustomPrice: sale.useCustomPrice,
           allowNegativeStock: sale.allowNegativeStock,
+          // FIX: For PARTIAL payments, use the actual paid amount
           paidAmount: sale.paidAmount,
           remainingAmount: sale.remainingAmount,
           totalAmount: sale.totalAmount,
-          };
+        };
 
-          // Add custom price if used
-          if (sale.useCustomPrice && sale.customPricePerPiece) {
-            payload.customPricePerPiece = sale.customPricePerPiece;
-          }
-
-          // Include payment details
-          if (sale.paymentMethod === "BANK_TRANSFER") {
-            if (sale.bankName) payload.bankName = sale.bankName;
-            if (sale.senderName) payload.senderName = sale.senderName;
-            if (sale.receiverName) payload.receiverName = sale.receiverName;
-          }
-
-          if (sale.paymentMethod === "TELEBIRR") {
-            if (sale.telebirrPhone) payload.telebirrPhone = sale.telebirrPhone;
-            if (sale.telebirrTransactionId)
-              payload.telebirrTransactionId = sale.telebirrTransactionId;
-          }
-
-          if (sale.paymentMethod === 'PARTIAL') {
-          payload.partialPaymentDetails = {
-            totalCartAmount,
-            paidAmount: sale.paidAmount,
-            remainingAmount: sale.remainingAmount,
-            paidPercentage: (sale.paidAmount / sale.totalAmount) * 100,
-            distributionMethod: 'PROPORTIONAL'
-          };
-            if (sale.firstPaymentMethod) payload.firstPaymentMethod = sale.firstPaymentMethod;
-            if (sale.paymentNotes) payload.paymentNotes = sale.paymentNotes;
-            if (sale.firstPaymentMethod)
-              payload.firstPaymentMethod = sale.firstPaymentMethod;
-            if (sale.paymentNotes) payload.paymentNotes = sale.paymentNotes;
-            if (sale.firstPaymentBank)
-              payload.firstPaymentBank = sale.firstPaymentBank;
-            if (sale.firstPaymentReference)
-              payload.firstPaymentReference = sale.firstPaymentReference;
-            if (sale.firstPaymentPhone)
-              payload.firstPaymentPhone = sale.firstPaymentPhone;
-            if (sale.firstPaymentDetails)
-              payload.firstPaymentDetails = sale.firstPaymentDetails;
-          }
-
-          if (sale.paymentMethod === "OTHER") {
-            if (sale.otherMethod) payload.otherMethod = sale.otherMethod;
-            if (sale.otherReference)
-              payload.otherReference = sale.otherReference;
-          }
-
-          await createSale(payload).unwrap();
-          successCount++;
-        } catch (error: any) {
-          console.error(`Failed to sell ${sale.name}:`, error);
-          message.error(
-            `${sale.name}: ${error?.data?.message || "Failed to sell"}`
-          );
-          failedCount++;
+        // Add custom price if used
+        if (sale.useCustomPrice && sale.customPricePerPiece) {
+          payload.customPricePerPiece = sale.customPricePerPiece;
         }
-      }
 
-      // Show summary with payment details
-    if (successCount > 0) {
-      const paymentMethodText = salesData[0]?.paymentMethod;
-      let summaryMessage = `Successfully processed ${successCount} items`;
-      
-      if (paymentMethodText === 'PARTIAL') {
-        const totalPaid = salesData.reduce((sum, sale) => sum + sale.paidAmount, 0);
-        const totalRemaining = salesData.reduce((sum, sale) => sum + sale.remainingAmount, 0);
+        // Include payment details
+        if (sale.paymentMethod === "BANK_TRANSFER") {
+          if (sale.bankName) payload.bankName = sale.bankName;
+          if (sale.senderName) payload.senderName = sale.senderName;
+          if (sale.receiverName) payload.receiverName = sale.receiverName;
+        }
+
+        if (sale.paymentMethod === "TELEBIRR") {
+          if (sale.telebirrPhone) payload.telebirrPhone = sale.telebirrPhone;
+          if (sale.telebirrTransactionId)
+            payload.telebirrTransactionId = sale.telebirrTransactionId;
+          if (sale.receiverName) payload.receiverName = sale.receiverName;
+        }
+
+        // FIX: For PARTIAL payments, make sure paidAmount < totalAmount
+        if (sale.paymentMethod === "PARTIAL") {
+          // Validate that paidAmount is less than totalAmount
+          if (sale.paidAmount >= sale.totalAmount) {
+            message.error(`${sale.name}: Paid amount must be less than total price for partial payments`);
+            failedCount++;
+            continue; // Skip this sale
+          }
+          
+          // For partial payments, we might need additional fields
+          if (sale.firstPaymentMethod) payload.firstPaymentMethod = sale.firstPaymentMethod;
+          if (sale.firstPaymentBank) payload.firstPaymentBank = sale.firstPaymentBank;
+          if (sale.firstPaymentReference) payload.firstPaymentReference = sale.firstPaymentReference;
+          if (sale.firstPaymentPhone) payload.firstPaymentPhone = sale.firstPaymentPhone;
+          if (sale.firstPaymentDetails) payload.firstPaymentDetails = sale.firstPaymentDetails;
+          //if (sale.dueDate) payload.dueDate = sale.dueDate;
+        }
+
+        if (sale.paymentMethod === "OTHER") {
+          if (sale.otherMethod) payload.otherMethod = sale.otherMethod;
+          if (sale.otherReference)
+            payload.otherReference = sale.otherReference;
+          if (sale.receiverName) payload.receiverName = sale.receiverName;
+        }
+
+        // Handle SPLIT payments
+        if (sale.paymentMethod === "SPLIT" && sale.paymentSplits) {
+          // Create summary for notes
+          const splitSummary = sale.paymentSplits.map(split => 
+            `${split.method}: $${split.amount.toFixed(2)} (${split.percentage.toFixed(1)}%)`
+          ).join('; ');
+          
+          payload.notes = `SPLIT PAYMENT: ${splitSummary}`;
+          
+          // Include the actual split data
+          payload.paymentSplits = sale.paymentSplits;
+        }
+
+        console.log(`Creating sale for ${sale.name} with payload:`, payload);
+        await createSale(payload).unwrap();
+        successCount++;
         
-        summaryMessage += ` (Partial Payment: $${totalPaid.toFixed(2)} paid, $${totalRemaining.toFixed(2)} remaining)`;
-      } else {
-        const totalAmount = salesData.reduce((sum, sale) => sum + sale.totalAmount, 0);
-        summaryMessage += ` (Total: $${totalAmount.toFixed(2)})`;
+        // Small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (error: any) {
+        console.error(`Failed to sell ${sale.name}:`, error);
+        message.error(
+          `${sale.name}: ${error?.data?.message || "Failed to sell"}`
+        );
+        failedCount++;
       }
-      
-      if (failedCount > 0) {
-        summaryMessage += `, ${failedCount} failed`;
-      }
-      
-      message.success(summaryMessage);
     }
 
-      return { successCount, failedCount };
-    } catch (error) {
-      console.error("Bulk sale error:", error);
-      return { successCount, failedCount: salesData.length };
-    } finally {
-      setIsProcessingBulkSale(false);
+    if (successCount > 0) {
+      message.success(`Successfully processed ${successCount} items, ${failedCount} failed`);
+      
+      // Clear cart only if all items were successfully processed
+      if (failedCount === 0) {
+        clearCart();
+      }
     }
-  };
 
+    return { successCount, failedCount };
+  } catch (error) {
+    console.error("Bulk sale error:", error);
+    return { successCount, failedCount: salesData.length };
+  } finally {
+    setIsProcessingBulkSale(false);
+  }
+};  
   
-
-  // Data processing
-  const productsWithCalculatedStock = useMemo(() => {
+const productsWithCalculatedStock = useMemo(() => {
     return filteredProducts.map((product) => ({
       ...product,
       calculatedStock: getMerkatoStock(product),
@@ -436,6 +692,17 @@ const ProductSellingPage = () => {
     },
     [dispatch]
   );
+
+  const handlePaymentMethodChange = (value: string) => {
+  // Validate it's a valid PaymentMethodType
+  const validMethods = Object.values(PAYMENT_METHODS);
+  if (validMethods.includes(value as PaymentMethodType)) {
+    setPaymentMethod(value);
+  } else {
+    console.warn(`Invalid payment method: ${value}`);
+    setPaymentMethod(PAYMENT_METHODS.CASH); // Default fallback
+  }
+};
 
   const handleSearch = useCallback((value: string) => {
     setLocalFilters((prev) => ({ ...prev, search: value }));
@@ -631,6 +898,11 @@ const ProductSellingPage = () => {
   const hasActiveFilters = localFilters.search || !localFilters.inStockOnly;
   const hasMoreProducts =
     merkatoProducts.length < 200 && merkatoProducts.length === query.limit;
+
+  // Handle cart modal close
+  const handleCartModalClose = () => {
+    setCartVisible(false);
+  };
 
   return (
     <div>
@@ -987,18 +1259,16 @@ const ProductSellingPage = () => {
       {/* Use the imported CartModal component */}
       <CartModal
         visible={cartVisible}
-        onClose={() => setCartVisible(false)}
+        onClose={handleCartModalClose}
         cart={cart}
         onClearCart={clearCart}
         onBulkSale={handleBulkSale}
         currentBuyer={currentBuyer}
         onBuyerChange={setCurrentBuyer}
-        paymentMethod={paymentMethod}
-        onPaymentMethodChange={setPaymentMethod}
+        paymentMethod={paymentMethod as PaymentMethodType}
+        onPaymentMethodChange={handlePaymentMethodChange}
         paymentDetails={paymentDetails}
-        onPaymentDetailChange={(field, value) =>
-          setPaymentDetails((prev) => ({ ...prev, [field]: value }))
-        }
+        onPaymentDetailChange={handlePaymentDetailChange}
         isProcessing={isProcessingBulkSale}
         calculateCartTotal={calculateCartTotal}
         updateCartItem={updateCartItem}

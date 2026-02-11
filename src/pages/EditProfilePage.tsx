@@ -1,11 +1,11 @@
 import { UploadOutlined, ArrowLeftOutlined, LoadingOutlined } from '@ant-design/icons';
 import { Button, Col, Flex, Row, Spin, message } from 'antd';
 import userProPic from '../assets/User.png';
-import CustomInput from '../components/CustomInput';
+import CustomInput from '../components/common/CustomInput';
 import { useForm } from 'react-hook-form';
 import { profileInputFields } from '../constant/profile';
 import { useGetSelfProfileQuery, useUpdateProfileMutation } from '../redux/features/authApi';
-import Loader from '../components/Loader';
+import Loader from '../components/common/Loader';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { config } from '../utils/config';

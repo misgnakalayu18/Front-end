@@ -34,6 +34,7 @@ import {
   ShoppingOutlined,
   InboxOutlined,
   CalendarOutlined,
+  PlusOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import toastMessage from "../../lib/toastMessage";
@@ -81,18 +82,19 @@ export type CartItem = {
 };
 
 export type PaymentDetails = {
-  [key: string]: string | number | undefined | null;
+  [key: string]: string | number | undefined | null | PaymentSplit[];
   paidAmount?: number;
   remainingAmount?: number;
+  paymentSplits?: PaymentSplit[]; // Array of split payments
   bankName?: string;
   senderName?: string;
-  receiverName?: string; // Fixed spelling from "reciverName"
+  receiverName?: string;
   telebirrPhone?: string;
   telebirrTransactionId?: string;
   firstPaymentMethod?: string;
   paymentNotes?: string;
   dueDate?: string;
-  dateOfSelling?: string; // Make this optional and changeable
+  dateOfSelling?: string;
   otherMethod?: string;
   otherReference?: string;
   firstPaymentBank?: string;
@@ -100,6 +102,30 @@ export type PaymentDetails = {
   firstPaymentPhone?: string;
   firstPaymentDetails?: string;
 };
+
+export type PaymentSplit = {
+  id: string;
+  method: string;
+  amount: number;
+  percentage: number;
+  bankName?: string;
+  senderName?: string;
+  receiverName?: string;
+  telebirrPhone?: string;
+  telebirrTransactionId?: string;
+  reference?: string;
+  otherMethod?: string;
+  otherDetails?: string;
+};
+
+const paymentMethods = [
+  { value: "CASH", label: "Cash (Full Payment)" },
+  { value: "BANK_TRANSFER", label: "Bank Transfer" },
+  { value: "TELEBIRR", label: "Telebirr" },
+  { value: "PARTIAL", label: "Partial Payment" },
+  { value: "SPLIT", label: "Split Payment" }, // NEW: For multiple payment methods
+  { value: "OTHER", label: "Other Payment Method" }
+];
 
 interface CartModalProps {
   visible: boolean;

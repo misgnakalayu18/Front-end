@@ -29,12 +29,12 @@ import { useNavigate } from 'react-router-dom';
 import { 
   useGetDashboardDataQuery, 
   useGetTransfersQuery 
-} from '../redux/features/warehouseApi';
-import WarehouseHeader from '../components/warehouse/WarehouseHeader';
-import PendingTransfers from '../components/warehouse/PendingTransfers';
-import TransferHistory from '../components/warehouse/TransferHistory';
-import TransferActionModal from '../components/warehouse/TransferActionModal';
-import TransferModal from '../components/warehouse/TransferModal'; // Import TransferModal
+} from '../../redux/features/warehouseApi';
+import WarehouseHeader from '../../components/warehouse/WarehouseHeader';
+import PendingTransfers from '../../components/warehouse/PendingTransfers';
+import TransferHistory from '../../components/warehouse/TransferHistory';
+import TransferActionModal from '../../components/warehouse/TransferActionModal';
+import TransferModal from '../../components/warehouse/TransferModal'; // Import TransferModal
 
 const { Text } = Typography;
 const { TabPane } = Tabs;

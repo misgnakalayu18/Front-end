@@ -127,6 +127,7 @@ export const baseApi = createApi({
     'Transfer',
     'Stock',
     'Warehouse',
+    'SplitPayment',
   ],
   endpoints: () => ({}),
 });

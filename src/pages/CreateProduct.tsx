@@ -1,7 +1,7 @@
 // components/CreateProduct.tsx
 import { Button, Col, Flex, Row, Card, Alert } from 'antd';
 import { FieldValues, useForm, useWatch } from 'react-hook-form';
-import CustomInput from '../components/CustomInput';
+import CustomInput from '../components/common/CustomInput';
 import toastMessage from '../lib/toastMessage';
 import { useCreateNewProductMutation } from '../redux/features/management/productApi';
 import { Warehouse, Unit } from '../types/product.types';

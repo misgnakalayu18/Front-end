@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/damo-inventory.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PILLAR-IMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,300;0,400;0,700;0,800;0,900;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        
+        /* Elegant gradient options (choose one): */
+        
+        /* Option 1: Professional blue gradient */
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        
+        /* Option 2: Modern teal gradient */
+        /* background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); */
+        
+        /* Option 3: Warm gradient */
+        /* background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); */
+        
+        /* Option 4: Dark elegant gradient */
+        /* background: linear-gradient(135deg, #0c2461 0%, #1e3799 100%); */
+        
+        font-family: 'Nunito', sans-serif;
+      }
+      
+      /* Subtty texture overlay */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+          radial-gradient(circle at 15% 50%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 20%, transparent 20%, transparent 100%),
+          radial-gradient(circle at 85% 30%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 20%, transparent 20%, transparent 100%);
+        background-size: 10% 10%;
+        z-index: -1;
+      }
+      
+      #root {
+        position: relative;
+        z-index: 1;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-D3HgFdLM.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CIhwz22L.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

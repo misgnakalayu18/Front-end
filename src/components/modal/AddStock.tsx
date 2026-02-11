@@ -8,7 +8,7 @@ import {
   toggleCreateVariantModel,
 } from '../../redux/services/modal.Slice';
 import { IProduct, Warehouse, ICurrentStockInfo } from '../../types/product.types';
-import { useAddStockMutation } from '../../redux/features/management/productApi';
+import { useAddStockV2Mutation } from '../../redux/features/management/productApi';
 
 const { Option } = Select;
 
@@ -25,67 +25,70 @@ const WAREHOUSE_OPTIONS = [
 const AddStockModal = () => {
   const modalOpen = useAppSelector(getCreateVariantModel);
   const data = useAppSelector(getCreateVariantModelData) as IProduct | null;
-  const [addStock, { isLoading }] = useAddStockMutation();
+  const [addStock, { isLoading }] = useAddStockV2Mutation(); // Changed to V2
   const dispatch = useAppDispatch();
   
   const [formData, setFormData] = useState({
     warehouse: '',
     addType: 'UNITS',
-    quantity: 0,
-    qtyPerCarton: 0,
+    quantity: data?.totalQty || 0,
+    qtyPerCarton: data?.qty || 0,
   });
 
-  const convertToCamelCaseState = (apiData: IProduct): ICurrentStockInfo => {
-  if (!apiData) {
+  // Utility function to convert API snake_case to frontend state
+  const convertToCamelCaseState = (apiData: any): ICurrentStockInfo => {
+    if (!apiData) {
+      return {
+        qty: 0,
+        ctn: 0,
+        totalQty: 0,
+        warehouse: '',
+        merkato_qty: 0,
+        embilta_qty: 0,
+        shegole_muluneh_qty: 0,
+        new_shegole_qty: 0,
+        damage_qty: 0,
+        backup_qty: 0,
+      };
+    }
+    
     return {
-      qty: 0,
-      ctn: 0,
-      totalQty: 0,
-      warehouse: '',
-      merkato_qty: 0,
-      embilta_qty: 0,
-      shegole_muluneh_qty: 0,
-      new_shegole_qty: 0,
-      damage_qty: 0,
-      backup_qty: 0,
+      qty: Number(apiData.qty) || 1,
+      ctn: Number(apiData.ctn) || 0,
+      totalQty: Number(apiData.total_qty) || 0, // Note: API returns snake_case
+      warehouse: apiData.warehouse || '',
+      
+      // Direct mapping from snake_case API response
+      merkato_qty: Number(apiData.merkato_qty) || 0,
+      embilta_qty: Number(apiData.embilta_qty) || 0,
+      shegole_muluneh_qty: Number(apiData.shegole_muluneh_qty) || 0,
+      new_shegole_qty: Number(apiData.new_shegole_qty) || 0,
+      damage_qty: Number(apiData.damage_qty) || 0,
+      backup_qty: Number(apiData.backup_qty) || 0,
     };
-  }
-  
-  return {
-    qty: Number(apiData.qty) || 1,
-    ctn: Number(apiData.ctn) || 1,
-    totalQty: Number(apiData.totalQty) || 0,
-    warehouse: apiData.warehouse || '',
-    merkato_qty: Number(apiData.merkatoQty) || 0,
-    embilta_qty: Number(apiData.embiltaQty) || 0,
-    shegole_muluneh_qty: Number(apiData.shegoleMulunehQty) || 0,
-    new_shegole_qty: Number(apiData.newShegoleQty) || 0,
-    damage_qty: Number(apiData.damageQty) || 0,
-    backup_qty: Number(apiData.backupQty) || 0,
   };
-};
 
-// Update getWarehouseQtyFromResponse:
-const getWarehouseQtyFromResponse = (apiData: IProduct | null, warehouse: string): number => {
-  if (!apiData || !warehouse) return 0;
-  
-  switch (warehouse) {
-    case Warehouse.MERKATO:
-      return Number(apiData.merkatoQty) || 0;
-    case Warehouse.SHEGOLE_MULUNEH:
-      return Number(apiData.shegoleMulunehQty) || 0;
-    case Warehouse.EMBILTA:
-      return Number(apiData.embiltaQty) || 0;
-    case Warehouse.NEW_SHEGOLE:
-      return Number(apiData.newShegoleQty) || 0;
-    case Warehouse.DAMAGE:
-      return Number(apiData.damageQty) || 0;
-    case Warehouse.BACKUP:
-      return Number(apiData.backupQty) || 0;
-    default:
-      return 0;
-  }
-};
+  // Get warehouse quantity from API response (snake_case)
+  const getWarehouseQtyFromResponse = (apiData: any, warehouse: string): number => {
+    if (!apiData || !warehouse) return 0;
+    
+    switch (warehouse) {
+      case Warehouse.MERKATO:
+        return Number(apiData.merkato_qty) || 0;
+      case Warehouse.SHEGOLE_MULUNEH:
+        return Number(apiData.shegole_muluneh_qty) || 0;
+      case Warehouse.EMBILTA:
+        return Number(apiData.embilta_qty) || 0;
+      case Warehouse.NEW_SHEGOLE:
+        return Number(apiData.new_shegole_qty) || 0;
+      case Warehouse.DAMAGE:
+        return Number(apiData.damage_qty) || 0;
+      case Warehouse.BACKUP:
+        return Number(apiData.backup_qty) || 0;
+      default:
+        return 0;
+    }
+  };
   
   const [currentStockInfo, setCurrentStockInfo] = useState<ICurrentStockInfo>({
     qty: 0,
@@ -117,95 +120,87 @@ const getWarehouseQtyFromResponse = (apiData: IProduct | null, warehouse: string
   };
 
   const onSubmit = async () => {
-    // Check if data exists
-    if (!data) {
-      toastMessage({ icon: 'error', text: 'No product selected' });
-      return;
+  // Check if data exists
+  if (!data) {
+    toastMessage({ icon: 'error', text: 'No product selected' });
+    return;
+  }
+
+  // Validation
+  if (!formData.quantity || formData.quantity <= 0) {
+    toastMessage({ icon: 'error', text: 'Please enter a valid quantity' });
+    return;
+  }
+
+  if (formData.addType === 'CARTONS' && (!formData.qtyPerCarton || formData.qtyPerCarton <= 0)) {
+    toastMessage({ icon: 'error', text: 'Please enter units per carton' });
+    return;
+  }
+
+  if (!formData.warehouse) {
+    toastMessage({ icon: 'error', text: 'Please select a warehouse' });
+    return;
+  }
+
+  try {
+    // Prepare parameters for addStockV2 API
+    const params: any = {
+      id: data.id,
+      warehouse: formData.warehouse,
+    };
+
+    if (formData.addType === 'CARTONS') {
+      // Calculate TOTAL units to add (cartons × units per carton)
+      const totalUnitsToAdd = formData.quantity * formData.qtyPerCarton;
+      
+      // Send total units as qty parameter
+      params.qty = totalUnitsToAdd;
+      params.ctn = formData.quantity; // number of cartons to add
+    } else {
+      // When adding units:
+      params.qty = formData.quantity; // total units to add
+      // Don't send ctn when adding individual units
     }
 
-    // Validation
-    if (!formData.quantity || formData.quantity <= 0) {
-      toastMessage({ icon: 'error', text: 'Please enter a valid quantity' });
-      return;
-    }
+    console.log('📤 Sending addStockV2 request:', params);
 
-    if (formData.addType === 'CARTONS' && (!formData.qtyPerCarton || formData.qtyPerCarton <= 0)) {
-      toastMessage({ icon: 'error', text: 'Please enter units per carton' });
-      return;
-    }
-
-    if (!formData.warehouse) {
-      toastMessage({ icon: 'error', text: 'Please select a warehouse' });
-      return;
-    }
-
-    try {
-      // Prepare parameters for addStock API
-      // IMPORTANT: For CARTONS addition, send both qty (units per carton) and ctn (number of cartons)
-      const params: any = {
-        id: data.id,
-        warehouse: formData.warehouse,
-      };
-
+    // Call the addStockV2 mutation
+    const res = await addStock(params).unwrap();
+    
+    console.log('✅ Add stock successful:', res);
+    
+    if (res.success || res.id) {
+      // Get the updated values from response
+      const updatedProduct = res.data || res;
+      const newCtn = updatedProduct.ctn || 0;
+      const newTotalQty = updatedProduct.total_qty || 0;
+      const newWarehouseQty = getWarehouseQtyFromResponse(updatedProduct, formData.warehouse);
+      
+      let message = '';
       if (formData.addType === 'CARTONS') {
-        // When adding cartons:
-        // - qty parameter should be the units per carton
-        // - ctn parameter should be the number of cartons to add
-        params.qty = formData.qtyPerCarton;
-        params.ctn = formData.quantity;
+        const totalUnits = formData.quantity * formData.qtyPerCarton;
+        message = `Added ${formData.quantity} cartons (${totalUnits} units) to ${formData.warehouse} warehouse. New total: ${newCtn} cartons, ${newTotalQty} units`;
       } else {
-        // When adding units:
-        // - qty parameter should be the total units to add
-        params.qty = formData.quantity;
+        message = `Added ${formData.quantity} units to ${formData.warehouse} warehouse. New total: ${newCtn} cartons, ${newTotalQty} units`;
       }
-
-      console.log('📤 Sending addStock request:', params);
-
-      // Call the addStock mutation
-      const res = await addStock(params).unwrap();
       
-      console.log('✅ Add stock successful:', res);
+      toastMessage({ icon: 'success', text: message });
+      dispatch(toggleCreateVariantModel({ open: false, data: null }));
+      resetForm();
       
-      if (res.success || res.id) {
-        // Calculate the expected new totals
-        const currentCtn = currentStockInfo.ctn;
-        const currentTotalQty = currentStockInfo.totalQty;
-        
-        let message = '';
-        if (formData.addType === 'CARTONS') {
-          const unitsPerCarton = formData.qtyPerCarton;
-          const cartonsAdded = formData.quantity;
-          const totalUnitsAdded = cartonsAdded * unitsPerCarton;
-          const newCtn = currentCtn + cartonsAdded;
-          const newTotalQty = currentTotalQty + totalUnitsAdded;
-          
-          message = `Added ${cartonsAdded} cartons (${totalUnitsAdded} units) to ${formData.warehouse} warehouse. New total: ${newCtn} cartons, ${newTotalQty} units`;
-        } else {
-          const unitsAdded = formData.quantity;
-          const unitsPerCarton = currentStockInfo.qty || 1;
-          const newTotalQty = currentTotalQty + unitsAdded;
-          const newCtn = Math.ceil(newTotalQty / unitsPerCarton);
-          
-          message = `Added ${unitsAdded} units to ${formData.warehouse} warehouse. New total: ${newCtn} cartons, ${newTotalQty} units`;
-        }
-        
-        toastMessage({ icon: 'success', text: message });
-        dispatch(toggleCreateVariantModel({ open: false, data: null }));
-        resetForm();
-        
-        // Refresh after a short delay
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      }
-    } catch (error: any) {
-      console.error('❌ Add stock error:', error);
-      toastMessage({ 
-        icon: 'error', 
-        text: error.data?.message || error.message || 'Failed to add stock' 
-      });
+      // Refresh after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     }
-  };
+  } catch (error: any) {
+    console.error('❌ Add stock error:', error);
+    toastMessage({ 
+      icon: 'error', 
+      text: error.data?.message || error.message || 'Failed to add stock' 
+    });
+  }
+};
 
   const resetForm = () => {
     setFormData({
@@ -223,7 +218,7 @@ const getWarehouseQtyFromResponse = (apiData: IProduct | null, warehouse: string
 
   useEffect(() => {
     if (modalOpen && data) {
-      // Convert API response (snake_case) to frontend state (camelCase)
+      // Convert API response (snake_case) to frontend state
       const stockInfo = convertToCamelCaseState(data);
       setCurrentStockInfo(stockInfo);
 
@@ -232,7 +227,7 @@ const getWarehouseQtyFromResponse = (apiData: IProduct | null, warehouse: string
         ...prev,
         warehouse: data.warehouse || Warehouse.MERKATO,
         qtyPerCarton: stockInfo.qty || 1,
-        quantity: 0, // Reset quantity when modal opens
+        quantity: data.totalQty || 0, // Reset quantity when modal opens
       }));
     } else if (!modalOpen) {
       // Reset everything when modal closes
@@ -254,40 +249,40 @@ const getWarehouseQtyFromResponse = (apiData: IProduct | null, warehouse: string
 
   const totalUnitsToAdd = calculateTotalUnitsToAdd();
 
-// Calculate new values for display - FIXED LOGIC
-let newQty = currentStockInfo.qty;
-let newCtn = currentStockInfo.ctn;
-let newTotalQty = currentStockInfo.totalQty;
+  // Calculate new values for display
+  let newQty = currentStockInfo.qty;
+  let newCtn = currentStockInfo.ctn;
+  let newTotalQty = currentStockInfo.totalQty;
 
-if (formData.addType === 'CARTONS') {
-  // When adding cartons: cartons are additive
-  const cartonsToAdd = formData.quantity;
-  
-  // FIX: Add cartons to existing count (1 + 5 = 6)
-  newCtn = currentStockInfo.ctn + cartonsToAdd;
-  
-  // If user specified a new qtyPerCarton, use it
-  if (formData.qtyPerCarton > 0) {
-    newQty = formData.qtyPerCarton;
+  if (formData.addType === 'CARTONS') {
+    // When adding cartons: cartons are additive
+    const cartonsToAdd = formData.quantity;
+    
+    // Add cartons to existing count
+    newCtn = currentStockInfo.ctn + cartonsToAdd;
+    
+    // If user specified a new qtyPerCarton, use it
+    if (formData.qtyPerCarton > 0) {
+      newQty = formData.qtyPerCarton;
+    }
+    
+    // Calculate total quantity based on new carton count
+    newTotalQty = newCtn * newQty;
+  } else {
+    // When adding units: units are additive, recalculate cartons
+    const unitsToAdd = formData.quantity;
+    const unitsPerCarton = currentStockInfo.qty || 1;
+    
+    newTotalQty = currentStockInfo.totalQty + unitsToAdd;
+    newCtn = Math.ceil(newTotalQty / unitsPerCarton);
+    newQty = unitsPerCarton;
   }
-  
-  // FIX: Calculate total quantity based on new carton count
-  newTotalQty = newCtn * newQty;
-} else {
-  // When adding units: units are additive, recalculate cartons
-  const unitsToAdd = formData.quantity;
-  const unitsPerCarton = currentStockInfo.qty || 1;
-  
-  newTotalQty = currentStockInfo.totalQty + unitsToAdd;
-  newCtn = Math.ceil(newTotalQty / unitsPerCarton);
-  newQty = unitsPerCarton;
-}
 
-// Calculate current warehouse quantity for display
-const currentWarehouseQty = getWarehouseQtyFromResponse(data, formData.warehouse);
-const newWarehouseQty = formData.warehouse 
-  ? currentWarehouseQty + totalUnitsToAdd 
-  : currentWarehouseQty;
+  // Calculate current warehouse quantity for display
+  const currentWarehouseQty = getWarehouseQtyFromResponse(data, formData.warehouse);
+  const newWarehouseQty = formData.warehouse 
+    ? currentWarehouseQty + totalUnitsToAdd 
+    : currentWarehouseQty;
 
   return (
     <>
@@ -432,7 +427,7 @@ const newWarehouseQty = formData.warehouse
                   addonAfter="units/ctn"
                 />
                 <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>
-                  Total units: {formData.quantity * formData.qtyPerCarton}
+                  Total units to add: {formData.quantity * formData.qtyPerCarton}
                 </div>
               </div>
             )}
@@ -473,6 +468,13 @@ const newWarehouseQty = formData.warehouse
                       </div>
                     </Col>
                   </Row>
+                  {formData.warehouse && (
+                    <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                        In {formData.warehouse}: {currentWarehouseQty} units
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Adding Details */}

@@ -1,4 +1,4 @@
-import { Button, Flex, Modal } from 'antd';
+import { Button, Flex, Modal, Input, InputNumber } from 'antd';
 import { useEffect, useState } from 'react';
 import toastMessage from '../../lib/toastMessage';
 import { useUpdateProductMutation } from '../../redux/features/management/productApi';
@@ -9,178 +9,243 @@ import {
   toggleUpdateModel,
 } from '../../redux/services/modal.Slice';
 import { IProduct } from '../../types/product.types';
-import ControlledModalInput from './ControlledModalInput';
-
-// Helper function for safe property assignment
-const setProductProperty = <T extends Partial<IProduct>>(
-  obj: T,
-  key: string,
-  value: any
-): T => {
-  const newObj = { ...obj };
-  
-  // Define all number fields in IProduct
-  const numberFields = [
-    'price', 'qty', 'default_price', 'min_sale_price', 'max_sale_price',
-    'shegole_muluneh_qty', 'embilta_qty', 'new_shegole_qty',
-    'merkato_qty', 'damage_qty', 'backup_qty', 'total_qty', 'total_price',
-    'min_stock_level', 'reorder_point', 'negative_stock_pieces',
-    'ctn' // Add ctn if it's a number field
-  ];
-  
-  if (numberFields.includes(key)) {
-    if (value === '' || value === null || value === undefined) {
-      (newObj as any)[key] = undefined;
-    } else {
-      const numValue = typeof value === 'string' ? parseFloat(value) : value;
-      if (!isNaN(numValue)) {
-        // Round to 2 decimal places
-        const roundedValue = Math.round((numValue + Number.EPSILON) * 100) / 100;
-        (newObj as any)[key] = roundedValue;
-      } else {
-        (newObj as any)[key] = undefined;
-      }
-    }
-  } else {
-    // For string/enum/boolean fields
-    (newObj as any)[key] = value;
-  }
-  
-  return newObj;
-};
 
 const EditModal = () => {
   const modalOpen = useAppSelector(getUpdateModal);
-  const data = useAppSelector(getUpdateModalData);
-  const [updateProduct] = useUpdateProductMutation();
+  const data = useAppSelector(getUpdateModalData) as IProduct | null;
+  const [updateProduct, { isLoading }] = useUpdateProductMutation();
   const dispatch = useAppDispatch();
-  const [updateData, setUpdateData] = useState<Partial<IProduct>>({});
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    price: 0,
+  });
 
   // Initialize form with data when modal opens
   useEffect(() => {
     if (data && modalOpen) {
-      // Ensure numbers are properly typed
-      const initializedData: Partial<IProduct> = { ...data };
-      
-      // Convert string numbers to actual numbers
-      const numberFields = ['price', 'qty', 'default_price', 'min_sale_price', 'max_sale_price'];
-      numberFields.forEach(field => {
-        if (initializedData[field as keyof IProduct] !== undefined && 
-            typeof initializedData[field as keyof IProduct] === 'string') {
-          (initializedData as any)[field] = parseFloat((initializedData as any)[field]);
-        }
+      console.log('📋 Initializing form with data:', {
+        name: data.name,
+        price: data.price,
+        rawPrice: data.price
       });
       
-      setUpdateData(initializedData);
+      setFormData({
+        name: data.name || '',
+        price: Number(data.price) || 0,
+      });
     }
   }, [data, modalOpen]);
 
-  const handleControlledChange = (name: string, value: string | number | undefined) => {
-    setUpdateData(prev => setProductProperty(prev, name, value));
+  const handleChange = (field: string, value: any) => {
+    console.log(`🔄 handleChange: ${field} =`, value);
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handlePriceChange = (value: number | null) => {
+    console.log('💰 handlePriceChange called with:', value, 'Type:', typeof value);
+    
+    // If value is null, set to 0
+    const newPrice = value === null ? 0 : value;
+    
+    console.log('💰 Setting price to:', newPrice);
+    handleChange('price', newPrice);
   };
 
   const onSubmit = async () => {
+    if (!data?.id) {
+      toastMessage({ icon: 'error', text: 'No product selected' });
+      return;
+    }
+
+    // Validation
+    if (!formData.name.trim()) {
+      toastMessage({ icon: 'error', text: 'Product name is required' });
+      return;
+    }
+
+    if (formData.price <= 0) {
+      toastMessage({ icon: 'error', text: 'Price must be greater than 0' });
+      return;
+    }
+
     try {
-      // Prepare payload
-      const payload: any = {};
-      
-      // Only include fields that have changed or are not undefined
-      Object.keys(updateData).forEach(key => {
-        if (key !== 'id' && updateData[key as keyof IProduct] !== undefined) {
-          payload[key] = updateData[key as keyof IProduct];
-        }
+      // Prepare payload - only name and price
+      const payload = {
+        name: formData.name.trim(),
+        price: formData.price,
+      };
+
+      console.log('🔄 Updating product:', { 
+        id: data.id, 
+        payload,
+        currentData: {
+          name: data.name,
+          price: data.price
+        },
+        newData: payload
       });
 
-      console.log('Sending payload:', payload);
-
       const res = await updateProduct({ 
-        id: updateData?.id as number, 
+        id: data.id, 
         payload 
       }).unwrap();
       
-      if (res.success) {
-        toastMessage({ icon: 'success', text: res.message });
-        dispatch(toggleUpdateModel({ open: false, data: null }));
+      console.log('✅ Update response:', res);
+      
+      if (res.success || res.statusCode === 200) {
+        toastMessage({ 
+          icon: 'success', 
+          text: `Product updated! Name: ${payload.name}, Price: $${payload.price}` 
+        });
+        
+        // Close modal and reset form
+        handleClose();
+        
+        // Refresh page after a short delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       } else {
-        toastMessage({ icon: 'error', text: res.message });
+        toastMessage({ icon: 'error', text: res.message || 'Failed to update product' });
       }
     } catch (error: any) {
-      console.error('Update error:', error);
-      toastMessage({ icon: 'error', text: error.data?.message || 'Failed to update product' });
+      console.error('❌ Update error:', error);
+      toastMessage({ 
+        icon: 'error', 
+        text: error.data?.message || error.message || 'Failed to update product' 
+      });
     }
   };
 
   const handleClose = () => {
-    setUpdateData({});
+    setFormData({
+      name: '',
+      price: 0,
+    });
     dispatch(toggleUpdateModel({ open: false, data: null }));
-  };
-
-  // Format display value for number fields
-  const formatDisplayValue = (value: any, fieldName: string): string => {
-    if (value === undefined || value === null) return '';
-    
-    const numberFields = ['price', 'qty', 'default_price', 'min_sale_price', 'max_sale_price'];
-    
-    if (numberFields.includes(fieldName)) {
-      const numValue = typeof value === 'number' ? value : parseFloat(value);
-      return isNaN(numValue) ? '' : numValue.toString();
-    }
-    
-    return value?.toString() || '';
   };
 
   return (
     <Modal
-      title='Update Product'
+      title="Edit Product"
       centered
       open={modalOpen}
-      onOk={handleClose}
       onCancel={handleClose}
       footer={[
-        <Button key='back' onClick={handleClose}>
-          Close
+        <Button key="cancel" onClick={handleClose}>
+          Cancel
+        </Button>,
+        <Button 
+          key="update" 
+          type="primary" 
+          onClick={onSubmit}
+          loading={isLoading}
+          disabled={!formData.name.trim() || formData.price <= 0}
+        >
+          Update Product
         </Button>,
       ]}
+      width={500}
     >
-      <form onSubmit={(e) => e.preventDefault()}>
-        <ControlledModalInput
-          name='code'
-          value={updateData?.code || ''}
-          onChange={handleControlledChange}
-          label='Code'
-        />
-        <ControlledModalInput
-          name='name'
-          value={updateData?.name || ''}
-          onChange={handleControlledChange}
-          label='Name'
-        />
-        <ControlledModalInput
-          name='price'
-          value={formatDisplayValue(updateData?.price, 'price')}
-          onChange={handleControlledChange}
-          label='Price'
-          type='number'
-          step="0.01"
-          min="0"
-          //placeholder="0.00"
-        />
-        <ControlledModalInput
-          name='qty'
-          value={formatDisplayValue(updateData?.qty, 'qty')}
-          onChange={handleControlledChange}
-          label='Quantity'
-          type='number'
-          step="0.01"
-          min="0"
-          //placeholder="0.00"
-        />
-        <Flex justify='center' style={{ margin: '1rem' }}>
-          <Button key='submit' type='primary' onClick={onSubmit}>
-            Update
-          </Button>
-        </Flex>
-      </form>
+      {!data ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <p>No product selected for editing.</p>
+        </div>
+      ) : (
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '1rem', 
+              borderRadius: '6px',
+              marginBottom: '1rem'
+            }}>
+              <div><strong>Product Code:</strong> {data.code}</div>
+              <div><strong>Current Name:</strong> {data.name}</div>
+              <div><strong>Current Price:</strong> ${data.price.toFixed(2)}</div>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                <strong>Debug:</strong> Form price value: ${formData.price}
+              </div>
+            </div>
+
+            {/* Product Name */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: 600 
+              }}>
+                Product Name *
+              </label>
+              <Input
+                value={formData.name}
+                onChange={(e) => {
+                  console.log('📝 Name changed:', e.target.value);
+                  handleChange('name', e.target.value);
+                }}
+                placeholder="Enter product name"
+                size="large"
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            {/* Product Price - Use InputNumber */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: 600 
+              }}>
+                Price *
+              </label>
+              <InputNumber
+                value={formData.price}
+                onChange={handlePriceChange}
+                placeholder="0.00"
+                size="large"
+                style={{ width: '100%' }}
+                min={0}
+                step={1}
+                precision={2}
+                formatter={(value) => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                parser={(value) => Number(value!.replace(/\$\s?|(,*)/g, ''))}
+                onFocus={(e) => {
+                  console.log('💰 Price input focused');
+                  // Select all text when focused for easy editing
+                  e.target.select();
+                }}
+                onBlur={() => {
+                  console.log('💰 Price input blurred, current value:', formData.price);
+                }}
+              />
+            </div>
+
+            {/* Preview */}
+            {formData.name.trim() && formData.price > 0 && (
+              <div style={{ 
+                backgroundColor: '#f6ffed', 
+                padding: '1rem', 
+                borderRadius: '6px',
+                border: '1px solid #b7eb8f',
+                marginTop: '1rem'
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                  Preview (will be sent to API):
+                </div>
+                <div><strong>Name:</strong> {formData.name}</div>
+                <div><strong>Price:</strong> ${formData.price.toFixed(2)}</div>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                  <strong>Payload:</strong> {JSON.stringify({name: formData.name, price: formData.price})}
+                </div>
+              </div>
+            )}
+          </div>
+        </form>
+      )}
     </Modal>
   );
 };

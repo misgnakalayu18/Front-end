@@ -29,7 +29,7 @@ import {
   useCreateUserMutation,
   useUpdateUserMutation 
 } from '../../redux/features/management/userApi';
-import Loader from '../../components/Loader';
+import Loader from '../../components/common/Loader';
 
 const { Option } = Select;
 

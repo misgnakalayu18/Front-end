@@ -52,7 +52,7 @@ const productApi = baseApi.injectEndpoints({
         
         return {
           url: `/products/${id}`,
-          method: 'PUT', // Using PUT to update the whole product
+          method: 'PATCH', // Using PUT to update the whole product
           body: payload
         };
       },
@@ -61,26 +61,15 @@ const productApi = baseApi.injectEndpoints({
 
     // ALTERNATIVE: If you have a dedicated add-stock endpoint
     addStockV2: builder.mutation({
-      query: ({ id, qty, ctn, warehouse, merkatoQty, embiltaQty, shegoleMulunehQty, newShegoleQty, damageQty, backupQty }) => {
-        console.log('📤 API Request - Add Stock V2:', { 
-          id, qty, ctn, warehouse, 
-          merkatoQty, embiltaQty, shegoleMulunehQty, 
-          newShegoleQty, damageQty, backupQty 
-        });
+      query: ({ id, qty, ctn, warehouse }) => {
         
         return {
-          url: `/products/${id}/add-stock`,
+          url: `/products/${id}/add`,
           method: 'PATCH',
           body: { 
             qty, 
             ctn,
-            warehouse,
-            merkatoQty,
-            embiltaQty,
-            shegoleMulunehQty,
-            newShegoleQty,
-            damageQty,
-            backupQty
+            warehouse
           }
         };
       },

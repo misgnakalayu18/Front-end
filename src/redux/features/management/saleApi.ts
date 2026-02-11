@@ -1,90 +1,122 @@
-// saleApi.ts - COMPLETE UPDATED VERSION
 import { baseApi } from "../baseApi";
-import { ISaleApiPaginatedResponse } from "../../../types/sale.type";
+import {
+  NormalizedSaleResponse,
+  ISaleApiResponse,
+} from "../../../types/sale.type";
 
-const normalizeSaleResponse = (response: any) => {
-  console.log("🔍 NORMALIZING API RESPONSE:", {
-    statusCode: response?.statusCode,
-    success: response?.success,
+// ✅ SIMPLIFIED NORMALIZATION - Based on your actual API structure
+const normalizeSaleResponse = (response: any): NormalizedSaleResponse => {
+  console.log("🔍 API Response Structure:", {
+    responseSuccess: response?.success,
     hasData: !!response?.data,
     dataKeys: response?.data ? Object.keys(response.data) : [],
-    // Check deep structure
-    hasDataData: !!response?.data?.data,
-    dataDataKeys: response?.data?.data ? Object.keys(response.data.data) : [],
+    hasSales: !!response?.data?.sales,
+    salesCount: Array.isArray(response?.data?.sales)
+      ? response.data.sales.length
+      : 0,
+    hasMeta: !!response?.data?.meta,
   });
 
-  // BRUTE FORCE - Try ALL possible locations for sales data
-  let salesData = null;
-  let paginationData = null;
-
-  // Location 1: response.data.data.sales (your actual API structure)
-  if (Array.isArray(response?.data?.data?.sales)) {
-    console.log("✅ Found sales at: response.data.data.sales");
-    salesData = response.data.data.sales;
-    paginationData = {
-      page: response.data.data.page || 1,
-      total: response.data.data.total || salesData.length,
-      pages: response.data.data.pages || 1,
-      limit: response.data.data.limit || 10,
-    };
-  }
-  // Location 2: response.data.sales
-  else if (Array.isArray(response?.data?.sales)) {
-    console.log("✅ Found sales at: response.data.sales");
-    salesData = response.data.sales;
-    paginationData = {
-      page: response.data.page || 1,
-      total: response.data.total || salesData.length,
-      pages: response.data.pages || 1,
-      limit: response.data.limit || 10,
-    };
-  }
-  // Location 3: response.sales
-  else if (Array.isArray(response?.sales)) {
-    console.log("✅ Found sales at: response.sales");
-    salesData = response.sales;
-    paginationData = response.pagination || {};
-  }
-  // Location 4: response.data.transactions (old structure)
-  else if (Array.isArray(response?.data?.transactions)) {
-    console.log("✅ Found transactions at: response.data.transactions");
-    salesData = response.data.transactions;
-    paginationData = response.data.pagination || {};
-  }
-
-  if (salesData) {
+  // ✅ Case 1: response.data.data.sales (Your actual structure)
+  if (response?.data?.data?.sales && Array.isArray(response.data.data.sales)) {
+    const sales = response.data.data.sales as ISaleApiResponse[];
     return {
-      success: true,
+      success: response.success || true,
       data: {
-        sales: salesData,
-        transactions: salesData, // For backward compatibility
-        total: salesData.length,
-        pagination: paginationData,
+        sales,
+        total: response.data.data.total || sales.length,
+        page: response.data.data.page || 1,
+        pages:
+          response.data.data.pages ||
+          Math.ceil(sales.length / (response.data.data.limit || 10)),
+        limit: response.data.data.limit || 10,
       },
     };
   }
 
-  // No data found
-  console.warn("❌ No sales data found in any expected location");
+  // ✅ Case 2: response.data.sales (Simplified structure)
+  else if (response?.data?.sales && Array.isArray(response.data.sales)) {
+    const sales = response.data.sales as ISaleApiResponse[];
+    return {
+      success: response.success || true,
+      data: {
+        sales,
+        total: response.data.total || sales.length,
+        page: response.data.page || 1,
+        pages:
+          response.data.pages ||
+          Math.ceil(sales.length / (response.data.limit || 10)),
+        limit: response.data.limit || 10,
+      },
+    };
+  }
+
+  // ✅ Case 3: Direct sales array in response.data
+  else if (response?.data && Array.isArray(response.data)) {
+    const sales = response.data as ISaleApiResponse[];
+    return {
+      success: response.success || true,
+      data: {
+        sales,
+        total: sales.length,
+        page: 1,
+        pages: 1,
+        limit: sales.length,
+      },
+    };
+  }
+
+  // ✅ Case 4: response.sales (Legacy structure)
+  else if (response?.sales && Array.isArray(response.sales)) {
+    const sales = response.sales as ISaleApiResponse[];
+    return {
+      success: response.success || true,
+      data: {
+        sales,
+        total: response.total || sales.length,
+        page: response.page || 1,
+        pages:
+          response.pages || Math.ceil(sales.length / (response.limit || 10)),
+        limit: response.limit || 10,
+      },
+    };
+  }
+
+  // ❌ No valid data found
+  console.warn("❌ No valid sales data found. Returning empty array.");
   return {
     success: false,
     data: {
       sales: [],
-      transactions: [],
-      total: salesData.length,
-      pagination: {},
+      total: 0,
+      page: 1,
+      pages: 1,
+      limit: 10,
     },
   };
 };
 
 const saleApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // ==================== SALES CRUD OPERATIONS ====================
-    getAllSale: builder.query({
+    // ==================== SALES CRUD ====================
+    getAllSale: builder.query<NormalizedSaleResponse, any>({
       query: (query) => ({
         url: "/sales",
         method: "GET",
         params: query,
+      }),
+      providesTags: ["sale"],
+      transformResponse: normalizeSaleResponse,
+    }),
+    getAllSaleNoPagination: builder.query<NormalizedSaleResponse, any>({
+      query: (query) => ({
+        url: "/sales",
+        method: "GET",
+        params: {
+          ...query,
+          page: 1,
+          limit: 10000, // Large limit to get all data
+        },
       }),
       providesTags: ["sale"],
       transformResponse: normalizeSaleResponse,
@@ -97,15 +129,7 @@ const saleApi = baseApi.injectEndpoints({
       }),
       providesTags: (result, error, id) => [{ type: "sale", id }],
       transformResponse: (response: any) => {
-        console.log("📦 Single sale response:", response);
-        // Return normalized data for consistency
-        if (response?.success && response.data) {
-          return {
-            success: true,
-            data: response.data,
-          };
-        }
-        return response;
+        return normalizeSaleResponse(response);
       },
     }),
 
@@ -116,23 +140,6 @@ const saleApi = baseApi.injectEndpoints({
         body: payload,
       }),
       invalidatesTags: ["sale", "product"],
-      transformResponse: (response: any) => {
-        console.log("📦 Create sale response:", response);
-        return response;
-      },
-    }),
-
-    createBulkSale: builder.mutation({
-      query: (payload) => ({
-        url: "/sales/bulk",
-        method: "POST",
-        body: payload,
-      }),
-      invalidatesTags: ["sale", "product"],
-      transformResponse: (response: any) => {
-        console.log("📦 Create bulk sale response:", response);
-        return response;
-      },
     }),
 
     updateSale: builder.mutation({
@@ -142,119 +149,50 @@ const saleApi = baseApi.injectEndpoints({
         body: payload,
       }),
       invalidatesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Update sale response:", response);
-        return response;
-      },
     }),
 
-    deleteSale: builder.mutation({
-      query: (id) => ({
-        url: `/sales/${id}`,
-        method: "DELETE",
+    // ==================== PAYMENT MANAGEMENT ====================
+    recordRepayment: builder.mutation({
+      query: ({ saleId, ...payload }) => ({
+        url: `/repayments/repay`,
+        method: "POST",
+        body: {
+          ...payload,
+          saleId,
+        },
       }),
-      invalidatesTags: ["sale", "product"],
-      transformResponse: (response: any) => {
-        console.log("📦 Delete sale response:", response);
-        return response;
-      },
+      invalidatesTags: ["sale"],
     }),
 
-    // ==================== SALES SUMMARY & ANALYTICS ====================
-    getSalesSummary: builder.query({
-      query: () => ({
-        url: `/sales/summary`,
-        method: "GET",
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Sales summary response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getSalesAnalytics: builder.query({
-      query: (params) => ({
-        url: `/sales/analytics`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Sales analytics response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // ==================== PERIOD-BASED REPORTS ====================
-    getSalesByPeriod: builder.query({
-      query: ({ period, year, month }) => ({
-        url: `/sales/period/${period}`,
-        method: "GET",
-        params: { year, month },
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Period sales response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // Consolidated report endpoint
-    getSalesReport: builder.query({
+    // ==================== REPORTS & ANALYTICS ====================
+    getSalesReport: builder.query<NormalizedSaleResponse, any>({
       query: (params) => ({
         url: `/sales/reports/periodic`,
         method: "GET",
         params,
       }),
       providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Sales report response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
+      transformResponse: normalizeSaleResponse,
     }),
 
-    // ==================== LEGACY REPORTS (for backward compatibility) ====================
+    getMonthlyReport: builder.query<NormalizedSaleResponse, any>({
+      query: (params) => ({
+        url: `/sales/reports/monthly`,
+        method: "GET",
+        params,
+      }),
+      providesTags: ["sale"],
+      transformResponse: normalizeSaleResponse,
+    }),
+
+    // ==================== LEGACY ENDPOINTS (Keep for backward compatibility) ====================
     yearlySale: builder.query({
       query: () => ({
         url: `/sales/yearly-sale`,
         method: "GET",
       }),
       providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Yearly sale response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
+      transformResponse: normalizeSaleResponse,
     }),
 
     monthlySale: builder.query({
@@ -264,16 +202,7 @@ const saleApi = baseApi.injectEndpoints({
         params,
       }),
       providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Monthly sale response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
+      transformResponse: normalizeSaleResponse,
     }),
 
     weeklySale: builder.query({
@@ -314,339 +243,74 @@ const saleApi = baseApi.injectEndpoints({
       },
     }),
 
-    // ==================== NEW REPORT ENDPOINTS ====================
-    getDailyReport: builder.query({
+    getSplitPayments: builder.query({
       query: (params) => ({
-        url: `/sales/reports/daily`,
+        url: "/sales/split-payments",
         method: "GET",
         params,
       }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Daily report response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
+      providesTags: ["SplitPayment"],
     }),
 
-    getWeeklyReport: builder.query({
+    // Get split payment details
+    getSplitPaymentDetails: builder.query({
+      query: (saleId) => `/sales/split-payments/${saleId}`,
+      providesTags: (result, error, saleId) => [
+        { type: "SplitPayment", id: saleId },
+      ],
+    }),
+
+    // Get split payment statistics
+    getSplitPaymentStats: builder.query({
       query: (params) => ({
-        url: `/sales/reports/weekly`,
+        url: "/sales/split-payments/stats",
         method: "GET",
         params,
       }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Weekly report response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
     }),
 
-    getMonthlyReport: builder.query({
-      query: (params) => ({
-        url: `/sales/reports/monthly`,
+    getAllSaleForExport: builder.query<NormalizedSaleResponse, any>({
+      query: (query) => ({
+        url: "/sales/export", // Separate endpoint optimized for exports
         method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Monthly report response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // ==================== PRODUCT REPORTS ====================
-    getProductReports: builder.query({
-      query: (params) => ({
-        url: `/sales/reports/products`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale", "product"],
-      transformResponse: (response: any) => {
-        console.log("📦 Product reports response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getSalesByProductCode: builder.query({
-      query: (code) => ({
-        url: `/sales/reports/products/${code}`,
-        method: "GET",
-      }),
-      providesTags: (result, error, code) => [{ type: "sale", id: code }],
-      transformResponse: (response: any) => {
-        console.log("📦 Sales by product code response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // ==================== TIME-BASED ANALYTICS ====================
-    getYears: builder.query({
-      query: () => ({
-        url: `/sales/analytics/years`,
-        method: "GET",
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Years response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getRecentSales: builder.query({
-      query: (params) => ({
-        url: `/sales/analytics/recent`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Recent sales response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // ==================== PAYMENT MANAGEMENT ====================
-    getPendingPayments: builder.query({
-      query: () => ({
-        url: `/sales/payments/pending`,
-        method: "GET",
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Pending payments response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    recordRepayment: builder.mutation({
-      query: ({ saleId, ...payload }) => ({
-        url: `/repayments/repay`, // Changed from /sales/:saleId/repay
-        method: "POST",
-        body: {
-          ...payload,
-          saleId, // Include saleId in the body instead of URL
+        params: {
+          ...query,
+          limit: 10000, // Reasonable limit
         },
       }),
-      invalidatesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Record repayment response:", response);
-        return response;
-      },
-    }),
-
-    // Legacy pending payments endpoint
-    pendingPayments: builder.query({
-      query: () => ({
-        url: `/sales/pending-payments`,
-        method: "GET",
-      }),
       providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Legacy pending payments response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    // ==================== NEW FEATURES (Flexible Pricing & Negative Stock) ====================
-    getCustomPriceSales: builder.query({
-      query: (params) => ({
-        url: `/sales/flexible-pricing/custom-price`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Custom price sales response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getNegativeStockSales: builder.query({
-      query: (params) => ({
-        url: `/sales/flexible-pricing/negative-stock`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Negative stock sales response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getBulkDiscountSales: builder.query({
-      query: (params) => ({
-        url: `/sales/flexible-pricing/bulk-discount`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Bulk discount sales response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getSalesStatistics: builder.query({
-      query: (params) => ({
-        url: `/sales/flexible-pricing/statistics`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Sales statistics response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getDashboardSummary: builder.query({
-      query: (params) => ({
-        url: `/sales/flexible-pricing/dashboard`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Dashboard summary response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
+      transformResponse: normalizeSaleResponse,
     }),
   }),
 });
 
 export const {
-  // Sales CRUD
+  // Core endpoints
   useGetAllSaleQuery,
+  useLazyGetAllSaleNoPaginationQuery, // ✅ Add this line
+  useGetAllSaleForExportQuery,
+  useLazyGetAllSaleForExportQuery,
   useGetSaleByIdQuery,
   useCreateSaleMutation,
   useUpdateSaleMutation,
-  useDeleteSaleMutation,
-  useCreateBulkSaleMutation,
+  useRecordRepaymentMutation,
 
-  // Summary & Analytics
-  useGetSalesSummaryQuery,
-  useGetSalesAnalyticsQuery,
-
-  // Period-based Reports
-  useGetSalesByPeriodQuery,
+  // Reports
   useGetSalesReportQuery,
-
-  // Legacy period queries
-  useYearlySaleQuery,
-  useMonthlySaleQuery,
-  useWeeklySaleQuery,
-  useDailySaleQuery,
-
-  // New report endpoints
-  useGetDailyReportQuery,
-  useGetWeeklyReportQuery,
   useGetMonthlyReportQuery,
 
-  // Product Reports
-  useGetProductReportsQuery,
-  useGetSalesByProductCodeQuery,
-
-  // Time-based Analytics
-  useGetYearsQuery,
-  useGetRecentSalesQuery,
-
-  // Payment Management
-  useGetPendingPaymentsQuery,
-  useRecordRepaymentMutation,
-  usePendingPaymentsQuery,
-
-  // New Features
-  useGetCustomPriceSalesQuery,
-  useGetNegativeStockSalesQuery,
-  useGetBulkDiscountSalesQuery,
-  useGetSalesStatisticsQuery,
-  useGetDashboardSummaryQuery,
+  // Legacy
+  useYearlySaleQuery,
+  useMonthlySaleQuery,
+  //   // Legacy period queries
+  //   useYearlySaleQuery,
+  //   useMonthlySaleQuery,
+  useWeeklySaleQuery,
+  useDailySaleQuery,
+  // Split Payments
+  useGetSplitPaymentsQuery,
+  useGetSplitPaymentDetailsQuery,
+  useGetSplitPaymentStatsQuery,
 } = saleApi;
 
 export default saleApi;

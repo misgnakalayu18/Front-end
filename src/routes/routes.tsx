@@ -16,7 +16,8 @@ import GenerateReportPage from '../pages/GenerateReportpage';
 import ManageUsersPage from '../pages/managements/ManageUsersPage'
 import ProductSellingPage from '../pages/ProductSellingPage';
 import EnhancedBulkUpload from '../pages/EnhancedBulkUpload';
-import WarehouseManagement from '../pages/WarehouseManagement';
+import WarehouseManagement from '../pages/managements/WarehouseManagement';
+import SplitPaymentManagementPage from '../pages/managements/SplitPaymentManagementPage';
 
 
 export const router = createBrowserRouter([
@@ -145,6 +146,14 @@ export const router = createBrowserRouter([
         
               <WarehouseManagement />
           
+          </ProtectRoute>
+        ),
+      },
+      {
+        path: '/management/sales/split-payments',
+        element: (
+          <ProtectRoute>
+            <SplitPaymentManagementPage />
           </ProtectRoute>
         ),
       },

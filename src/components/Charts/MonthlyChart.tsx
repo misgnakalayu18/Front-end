@@ -10,12 +10,45 @@ import {
   YAxis,
 } from 'recharts';
 import { useMonthlySaleQuery } from '../../redux/features/management/saleApi';
-import Loader from '../Loader';
+import Loader from '../common/Loader';
 import { useState, useMemo } from 'react';
 
 const { Option } = Select;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
+
+// Define the API response type based on your Sale API
+interface SaleItem {
+  id: number;
+  total_price: number;
+  quantity: number;
+  date: string;
+  product_name: string;
+  buyer_name: string;
+  warehouse: string;
+  payment_method: string;
+  payment_status: string;
+  created_at: string;
+}
+
+interface MonthlyResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    sales: SaleItem[];
+    total?: number;
+    page?: number;
+    pages?: number;
+    limit?: number;
+    meta?: {
+      userRole?: string;
+      hasFullAccess?: boolean;
+      filteredByUser?: boolean;
+      filteredUserId?: number;
+      currentUserId?: number;
+    };
+  };
+}
 
 const MonthlyChart = () => {
   const screens = useBreakpoint();
@@ -36,18 +69,19 @@ const MonthlyChart = () => {
   const { data: monthlyResponse, isLoading, error, refetch } = 
     useMonthlySaleQuery({ month: selectedMonth });
 
-  // Extract sales data from API response
+  // Extract sales data from API response - SIMPLIFIED FOR SALE API
   const salesData = useMemo(() => {
+    console.log('MonthlyChart - API Response:', monthlyResponse);
+    
     if (!monthlyResponse?.success) return [];
     
+    // Sale API returns sales array directly
     if (Array.isArray(monthlyResponse.data?.sales)) {
+      console.log('MonthlyChart - Found sales:', monthlyResponse.data.sales.length);
       return monthlyResponse.data.sales;
     }
     
-    if (Array.isArray(monthlyResponse.data)) {
-      return monthlyResponse.data;
-    }
-    
+    console.log('MonthlyChart - No sales array found');
     return [];
   }, [monthlyResponse]);
 
@@ -64,23 +98,31 @@ const MonthlyChart = () => {
     return months;
   }, [selectedYear]);
 
-  // Calculate statistics
+  // Calculate statistics from sales array
   const statistics = useMemo(() => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
     if (!salesData.length) {
       return {
         totalRevenue: 0,
         totalQuantity: 0,
         totalSales: 0,
         averageRevenue: 0,
-        activeDays: 0
+        activeDays: 0,
+        daysInMonth: daysInMonth
       };
     }
 
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
     const dailyRevenue: Record<number, number> = {};
 
-    salesData.forEach((sale: any) => {
+    // Initialize counters
+    let totalRevenue = 0;
+    let totalQuantity = 0;
+    let totalSales = 0;
+
+    // Process each sale
+    salesData.forEach((sale: SaleItem) => {
       if (!sale.date) return;
       
       try {
@@ -91,35 +133,61 @@ const MonthlyChart = () => {
         ) {
           const day = saleDate.getDate();
           dailyRevenue[day] = (dailyRevenue[day] || 0) + (Number(sale.total_price) || 0);
+          
+          // Accumulate totals
+          totalRevenue += Number(sale.total_price) || 0;
+          totalQuantity += Number(sale.quantity) || 0;
+          totalSales += 1;
         }
       } catch (error) {
         console.error('Error processing sale:', error);
       }
     });
 
-    const totals = salesData.reduce(
-      (acc, sale) => ({
-        totalRevenue: acc.totalRevenue + (Number(sale.total_price) || 0),
-        totalQuantity: acc.totalQuantity + (Number(sale.quantity) || 0),
-        totalSales: acc.totalSales + 1,
-      }),
-      { totalRevenue: 0, totalQuantity: 0, totalSales: 0 }
-    );
-
     return {
-      ...totals,
-      averageRevenue: totals.totalSales > 0 ? totals.totalRevenue / totals.totalSales : 0,
-      activeDays: Object.keys(dailyRevenue).length
+      totalRevenue,
+      totalQuantity,
+      totalSales,
+      averageRevenue: totalSales > 0 ? totalRevenue / totalSales : 0,
+      activeDays: Object.keys(dailyRevenue).length,
+      daysInMonth: daysInMonth
     };
   }, [salesData, selectedMonth]);
 
-  // Prepare chart data - optimized version
+  // Prepare chart data from sales array
   const chartData = useMemo(() => {
-    if (!salesData.length) return [];
+    console.log('MonthlyChart - Preparing chart data for:', selectedMonth);
+    console.log('MonthlyChart - Sales data count:', salesData.length);
+    
+    if (!salesData.length) {
+      console.log('MonthlyChart - No sales data available');
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      // Return empty data for all days
+      const emptyData = Array.from({ length: daysInMonth }, (_, index) => {
+        const day = index + 1;
+        return {
+          day,
+          date: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`,
+          revenue: 0,
+          quantity: 0,
+          transactionCount: 0,
+          name: isMobile ? day.toString() : `Day ${day}`,
+          label: day.toString(),
+          fullDate: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+        };
+      });
+      
+      console.log('MonthlyChart - Empty chart data generated:', emptyData.length, 'days');
+      return emptyData;
+    }
 
     try {
       const [year, month] = selectedMonth.split('-').map(Number);
       const daysInMonth = new Date(year, month, 0).getDate();
+      
+      console.log(`MonthlyChart - Processing ${salesData.length} sales for ${year}-${month}, ${daysInMonth} days`);
       
       // Initialize array for all days
       const dailyData = Array.from({ length: daysInMonth }, (_, index) => {
@@ -134,7 +202,8 @@ const MonthlyChart = () => {
       });
 
       // Process sales data
-      salesData.forEach((sale: any) => {
+      let processedSales = 0;
+      salesData.forEach((sale: SaleItem) => {
         if (!sale.date) return;
         
         try {
@@ -148,27 +217,45 @@ const MonthlyChart = () => {
               dailyData[day].revenue += Number(sale.total_price) || 0;
               dailyData[day].quantity += Number(sale.quantity) || 0;
               dailyData[day].transactionCount += 1;
+              processedSales++;
             }
           }
         } catch (error) {
-          // Silently handle date parsing errors
+          console.error('Error processing sale for chart:', sale, error);
         }
       });
 
+      console.log(`MonthlyChart - Processed ${processedSales} sales into chart data`);
+
       // Format for chart
-      return dailyData.map(dayData => ({
+      const result = dailyData.map(dayData => ({
         ...dayData,
         name: isMobile ? dayData.day.toString() : `Day ${dayData.day}`,
         label: dayData.day.toString(),
         fullDate: dayData.date
       }));
+      
+      // Check which days have data
+      const daysWithData = result.filter(day => day.revenue > 0);
+      console.log('MonthlyChart - Days with data:', daysWithData.map(d => d.day));
+      console.log('MonthlyChart - Chart data sample:', result.slice(0, 5));
+      
+      return result;
     } catch (error) {
-      console.error('Error preparing chart data:', error);
+      console.error('MonthlyChart - Error preparing chart data:', error);
       return [];
     }
   }, [salesData, selectedMonth, isMobile]);
 
-  // Custom tooltip
+  // Debug: Log final chart data
+  console.log('MonthlyChart - Final chartData length:', chartData?.length);
+  console.log('MonthlyChart - Has data:', chartData?.some(day => day.revenue > 0));
+  if (chartData?.some(day => day.revenue > 0)) {
+    const daysWithRevenue = chartData.filter(day => day.revenue > 0);
+    console.log('MonthlyChart - Days with revenue:', daysWithRevenue.map(d => ({ day: d.day, revenue: d.revenue })));
+  }
+
+  // Custom tooltip - FIXED CURRENCY TO ETB
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataItem = payload[0]?.payload;
@@ -191,7 +278,7 @@ const MonthlyChart = () => {
           </p>
           <div style={{ lineHeight: '1.4' }}>
             <p style={{ margin: '3px 0', color: '#1890ff' }}>
-              <strong>Revenue:</strong> ${dataItem?.revenue?.toLocaleString()}
+              <strong>Revenue:</strong> ETB {dataItem?.revenue?.toLocaleString()}
             </p>
             <p style={{ margin: '3px 0', color: '#666' }}>
               <strong>Quantity:</strong> {dataItem?.quantity?.toLocaleString()}
@@ -260,6 +347,8 @@ const MonthlyChart = () => {
   }
 
   const hasData = chartData.some(day => day.revenue > 0);
+  
+  console.log('MonthlyChart - Rendering, hasData:', hasData);
   
   if (!hasData) {
     return (
@@ -337,7 +426,7 @@ const MonthlyChart = () => {
         </Space>
       </div>
 
-      {/* Compact Summary Stats */}
+      {/* Compact Summary Stats - FIXED CURRENCY TO ETB */}
       <div style={{ 
         marginBottom: '12px',
         padding: '8px',
@@ -356,7 +445,7 @@ const MonthlyChart = () => {
             padding: '2px 6px',
             margin: 0
           }}>
-            ${statistics.totalRevenue.toLocaleString()}
+            ETB {statistics.totalRevenue.toLocaleString()}
           </Tag>
           <Tag color="green" style={{ 
             fontSize: '11px', 
@@ -370,7 +459,7 @@ const MonthlyChart = () => {
             padding: '2px 6px',
             margin: 0
           }}>
-            ${statistics.averageRevenue.toFixed(0)} avg
+            ETB {statistics.averageRevenue.toFixed(0)} avg
           </Tag>
         </div>
       </div>
@@ -396,7 +485,7 @@ const MonthlyChart = () => {
             />
             <YAxis 
               fontSize={10}
-              tickFormatter={(value) => `$${value.toLocaleString()}`}
+              tickFormatter={(value) => `ETB ${value.toLocaleString()}`}
               width={40}
               tick={{ fill: '#666' }}
             />
@@ -404,7 +493,7 @@ const MonthlyChart = () => {
             <Bar 
               dataKey="revenue" 
               fill="#1890ff" 
-              name="Revenue ($)"
+              name="Revenue (ETB)"
               radius={[2, 2, 0, 0]}
               barSize={isMobile ? 10 : 14}
             />
@@ -412,7 +501,7 @@ const MonthlyChart = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Legend and Info */}
+      {/* Legend and Info - FIXED CURRENCY TO ETB */}
       <div style={{ 
         marginTop: '8px',
         display: 'flex',
@@ -422,10 +511,10 @@ const MonthlyChart = () => {
         color: '#666'
       }}>
         <span>
-          Active days: {statistics.activeDays}/{chartData.length}
+          Active days: {statistics.activeDays}/{statistics.daysInMonth || chartData.length}
         </span>
         <span>
-          Total: ${statistics.totalRevenue.toLocaleString()}
+          Total: ETB {statistics.totalRevenue.toLocaleString()}
         </span>
       </div>
     </div>

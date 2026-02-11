@@ -11,7 +11,7 @@ import {
   Legend,
 } from 'recharts';
 import { useDailySaleQuery } from '../../redux/features/management/saleApi';
-import Loader from '../Loader';
+import Loader from '../common/Loader';
 import { useEffect, useMemo, useState } from 'react';
 
 export default function DailyChart() {

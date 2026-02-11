@@ -1,7 +1,7 @@
 import { EditFilled, EditOutlined } from '@ant-design/icons';
 import { Button, Col, Flex, Row } from 'antd';
 import userProPic from '../assets/User.png';
-import Loader from '../components/Loader';
+import Loader from '../components/common/Loader';
 import { useGetSelfProfileQuery } from '../redux/features/authApi';
 import { profileKeys } from '../constant/profile';
 import { Link } from 'react-router-dom';

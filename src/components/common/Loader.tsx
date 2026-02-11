@@ -1,5 +1,5 @@
 import { Flex } from 'antd';
-import loader from '../assets/loading.gif';
+import loader from '../../assets/loading.gif';
 
 const Loader = () => (
   <Flex

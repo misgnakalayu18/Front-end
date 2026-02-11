@@ -16,6 +16,11 @@ dist-ssr
 .env.production
 .env.local
 .htaccess
+dist_backup.zip
+dist-final.zip
+dist-final-1.zip
+dist.zip
+dist1.1.zip
 
 # Editor directories and files
 .vscode/*

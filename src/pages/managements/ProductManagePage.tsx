@@ -22,20 +22,18 @@ import {
   message
 } from 'antd';
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { FieldValues, useForm } from 'react-hook-form';
 import {
   useDeleteProductMutation,
   useGetAllProductsQuery,
-  useUpdateProductMutation,
 } from '../../redux/features/management/productApi';
 import { IProduct } from '../../types/product.types';
-import CustomInput from '../../components/CustomInput';
 import toastMessage from '../../lib/toastMessage';
 import { useAppDispatch } from '../../redux/hooks';
-import { toggleCreateVariantModel } from '../../redux/services/modal.Slice';
+import { toggleCreateVariantModel, toggleUpdateModel } from '../../redux/services/modal.Slice';
 import TransferModal from '../../components/warehouse/TransferModal';
 import { useNavigate } from 'react-router-dom';
 import AddStockModal from '../../components/modal/AddStock';
+import EditModal from '../../components/modal/EditModal';
 import { TransferHistory } from '../../components/warehouse';
 import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';
@@ -64,10 +62,15 @@ const ProductManagePage = () => {
   const [transferHistoryModalOpen, setTransferHistoryModalOpen] = useState(false);
   const [selectedProductForHistory, setSelectedProductForHistory] = useState<any>(null);
 
+ const handleEditClick = (product: IProduct) => {
+  // Dispatch to Redux to open the modal with the selected product
+  dispatch(toggleUpdateModel({ open: true, data: product }));
+};
+
   // Fetch all products once
   const { data: productsData, isFetching, refetch } = useGetAllProductsQuery({
     page: 1,
-    limit: 1000, // Fetch all products at once
+    limit: 1000,
   });
 
   const dispatch = useAppDispatch();
@@ -81,7 +84,6 @@ const ProductManagePage = () => {
 
     let result = [...allProducts];
 
-    // Apply search filter (matches name, code, or warehouse)
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       result = result.filter(product =>
@@ -91,21 +93,18 @@ const ProductManagePage = () => {
       );
     }
 
-    // Apply warehouse filter
     if (filters.warehouse) {
       result = result.filter(product =>
         product.warehouse && product.warehouse.toLowerCase() === filters.warehouse.toLowerCase()
       );
     }
 
-    // Apply code filter
     if (filters.code) {
       result = result.filter(product =>
         product.code && product.code.toLowerCase() === filters.code.toLowerCase()
       );
     }
 
-    // Apply name filter
     if (filters.name) {
       result = result.filter(product =>
         product.name && product.name.toLowerCase().includes(filters.name.toLowerCase())
@@ -133,10 +132,9 @@ const ProductManagePage = () => {
     setCurrent(page);
     if (newPageSize) {
       setPageSize(newPageSize);
-      setCurrent(1); // Reset to first page when page size changes
+      setCurrent(1);
     }
     
-    // Scroll to top of table when pagination changes
     if (tableRef.current) {
       tableRef.current.scrollIntoView({ behavior: 'smooth' });
     }
@@ -148,7 +146,7 @@ const ProductManagePage = () => {
       ...prev,
       [key]: value
     }));
-    setShowFilters(false); // Close drawer on mobile
+    setShowFilters(false);
   };
 
   // Clear all filters
@@ -163,7 +161,6 @@ const ProductManagePage = () => {
 
   // Handle transfer button click from top button
   const handleStockTransferClick = () => {
-    // Open transfer modal without pre-selecting a product
     setSelectedProductForTransfer(null);
     setTransferModalOpen(true);
   };
@@ -220,7 +217,6 @@ const ProductManagePage = () => {
     }
 
     try {
-      // Prepare data for export
       const exportData = filteredProducts.map((product: IProduct) => {
         const totalStock = calculateTotalStock(product);
         return {
@@ -236,31 +232,27 @@ const ProductManagePage = () => {
         };
       });
 
-      // Create workbook and worksheet
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
       
-      // Add column widths
       const wscols = [
-        { wch: 15 }, // Product Code
-        { wch: 30 }, // Product Name
-        { wch: 20 }, // Warehouse
-        { wch: 12 }, // Unit Price
-        { wch: 15 }, // Quantity per Carton
-        { wch: 15 }, // Number of Cartons
-        { wch: 12 }, // Total Units
-        { wch: 15 }, // Total Value
-        { wch: 10 }, // Unit
+        { wch: 15 },
+        { wch: 30 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 10 },
       ];
       ws['!cols'] = wscols;
 
       XLSX.utils.book_append_sheet(wb, ws, 'Products');
 
-      // Generate filename with timestamp
       const timestamp = dayjs().format('YYYY-MM-DD_HH-mm');
       const filename = `products_export_${timestamp}.xlsx`;
 
-      // Write to file and trigger download
       XLSX.writeFile(wb, filename);
       
       message.success(`Exported ${exportData.length} products to Excel`);
@@ -290,7 +282,6 @@ const ProductManagePage = () => {
           type="text" 
           icon={<ExportOutlined />}
           onClick={() => {
-            // Export all products
             const originalFilters = { ...filters };
             setFilters({ search: '', warehouse: '', code: '', name: '' });
             setTimeout(() => {
@@ -313,7 +304,6 @@ const ProductManagePage = () => {
   // Mobile responsive table columns
   const getTableColumns = (): TableColumnsType<any> => {
     if (isMobile) {
-      // Mobile view - simpler columns
       return [
         {
           title: 'Product',
@@ -351,7 +341,15 @@ const ProductManagePage = () => {
                     >
                       Add Stock
                     </Button>
-                    <UpdateProductModal product={record} />
+                    <Button
+                      onClick={() => handleEditClick(record)}
+                      type='primary'
+                      size="small"
+                      style={{ backgroundColor: 'green' }}
+                      icon={<EditFilled />}
+                    >
+                      Edit
+                    </Button>
                     <DeleteProductModal id={record.key} />
                   </Space>
                 </div>
@@ -464,7 +462,17 @@ const ProductManagePage = () => {
                 </Button>
               </Tooltip>
 
-              <UpdateProductModal product={item} />
+              <Tooltip title="Edit Product">
+                <Button
+                  onClick={() => handleEditClick(item)}
+                  type='primary'
+                  size="small"
+                  style={{ backgroundColor: 'green' }}
+                  icon={<EditFilled />}
+                >
+                  Edit
+                </Button>
+              </Tooltip>
               <DeleteProductModal id={item.key} />
             </Space>
           );
@@ -529,7 +537,6 @@ const ProductManagePage = () => {
       }
     >
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        {/* General Search */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>Search</Text>
           <Input.Search
@@ -543,7 +550,6 @@ const ProductManagePage = () => {
           />
         </div>
 
-        {/* Warehouse Filter */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>Warehouse</Text>
           <Select
@@ -562,7 +568,6 @@ const ProductManagePage = () => {
           </Select>
         </div>
 
-        {/* Product Code Filter */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>Product Code</Text>
           <Select
@@ -585,7 +590,6 @@ const ProductManagePage = () => {
           </Select>
         </div>
 
-        {/* Product Name Filter */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>Product Name</Text>
           <Select
@@ -683,7 +687,6 @@ const ProductManagePage = () => {
           }
         >
           <Row gutter={[16, 16]}>
-            {/* General Search */}
             <Col xs={24} sm={12} md={6}>
               <Input.Search
                 placeholder="Search by name, code, or warehouse..."
@@ -696,7 +699,6 @@ const ProductManagePage = () => {
               />
             </Col>
 
-            {/* Warehouse Filter */}
             <Col xs={24} sm={12} md={4}>
               <Select
                 placeholder="Warehouse"
@@ -714,7 +716,6 @@ const ProductManagePage = () => {
               </Select>
             </Col>
 
-            {/* Product Code Filter */}
             <Col xs={24} sm={12} md={4}>
               <Select
                 placeholder="Product Code"
@@ -736,7 +737,6 @@ const ProductManagePage = () => {
               </Select>
             </Col>
 
-            {/* Product Name Filter */}
             <Col xs={24} sm={12} md={4}>
               <Select
                 placeholder="Product Name"
@@ -752,68 +752,66 @@ const ProductManagePage = () => {
               >
                 {productNames.map((name: string) => (
                   <Option key={name} value={name}>
-                {name}
-              </Option>
-            ))}
-          </Select>
-        </Col>
+                    {name}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
 
-        {/* Filter Information */}
-        {hasActiveFilters && (
-          <Col xs={24}>
-            <Alert
-              message="All filters are applied client-side"
-              description={`Showing ${filteredProducts.length} of ${allProducts.length} products`}
-              type="info"
-              showIcon
-              closable
-            />
-          </Col>
-        )}
+            {hasActiveFilters && (
+              <Col xs={24}>
+                <Alert
+                  message="All filters are applied client-side"
+                  description={`Showing ${filteredProducts.length} of ${allProducts.length} products`}
+                  type="info"
+                  showIcon
+                  closable
+                />
+              </Col>
+            )}
 
-        {/* Active Filters Display */}
-        <Col xs={24}>
-          <Flex gap={8} wrap>
-            {filters.warehouse && (
-              <Tag
-                closable
-                onClose={() => handleFilterChange('warehouse', '')}
-                color="blue"
-              >
-                Warehouse: {filters.warehouse}
-              </Tag>
-            )}
-            {filters.search && (
-              <Tag
-                closable
-                onClose={() => handleFilterChange('search', '')}
-                color="green"
-              >
-                Search: {filters.search}
-              </Tag>
-            )}
-            {filters.code && (
-              <Tag
-                closable
-                onClose={() => handleFilterChange('code', '')}
-                color="orange"
-              >
-                Code: {filters.code}
-              </Tag>
-            )}
-            {filters.name && (
-              <Tag
-                closable
-                onClose={() => handleFilterChange('name', '')}
-                color="purple"
-              >
-                Name: {filters.name}
-              </Tag>
-            )}
-          </Flex>
-        </Col>
-      </Row>
-    </Card>
+            <Col xs={24}>
+              <Flex gap={8} wrap>
+                {filters.warehouse && (
+                  <Tag
+                    closable
+                    onClose={() => handleFilterChange('warehouse', '')}
+                    color="blue"
+                  >
+                    Warehouse: {filters.warehouse}
+                  </Tag>
+                )}
+                {filters.search && (
+                  <Tag
+                    closable
+                    onClose={() => handleFilterChange('search', '')}
+                    color="green"
+                  >
+                    Search: {filters.search}
+                  </Tag>
+                )}
+                {filters.code && (
+                  <Tag
+                    closable
+                    onClose={() => handleFilterChange('code', '')}
+                    color="orange"
+                  >
+                    Code: {filters.code}
+                  </Tag>
+                )}
+                {filters.name && (
+                  <Tag
+                    closable
+                    onClose={() => handleFilterChange('name', '')}
+                    color="purple"
+                  >
+                    Name: {filters.name}
+                  </Tag>
+                )}
+              </Flex>
+            </Col>
+          </Row>
+        </Card>
       )}
 
       {/* Summary Cards - Responsive */}
@@ -1007,6 +1005,7 @@ const ProductManagePage = () => {
 
       {/* Render the external modals */}
       <AddStockModal />
+      <EditModal />
       <TransferModal
         open={transferModalOpen}
         onClose={() => {
@@ -1020,122 +1019,8 @@ const ProductManagePage = () => {
   );
 }
 
-// The UpdateProductModal and DeleteProductModal components remain the same...
-
 /**
- * Update Product Modal
- */
-const UpdateProductModal = ({ product }: { product: IProduct & { key: string } }) => {
-  const [updateProduct] = useUpdateProductMutation();
-
-  const {
-    handleSubmit,
-    register,
-    formState: { errors },
-    reset,
-  } = useForm({
-    defaultValues: {
-      name: product.name,
-      price: product.price,
-    },
-  });
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const onSubmit = async (data: FieldValues) => {
-    try {
-      const res = await updateProduct({ id: product.key, payload: data }).unwrap();
-      if (res.statusCode === 200) {
-        toastMessage({ icon: 'success', text: res.message });
-        reset();
-        handleCancel();
-      }
-    } catch (error: any) {
-      handleCancel();
-      toastMessage({ icon: 'error', text: error.data.message });
-    }
-  };
-
-  const showModal = () => {
-    setIsModalOpen(true);
-  };
-
-  const handleCancel = () => {
-    setIsModalOpen(false);
-  };
-
-  return (
-    <>
-      <Button
-        onClick={showModal}
-        type='primary'
-        size="small"
-        style={{ backgroundColor: 'green' }}
-      >
-        <EditFilled />
-      </Button>
-      <Modal
-  title='Update Product Info'
-  open={isModalOpen}
-  onCancel={handleCancel}
-  footer={null}
-  width={400}
->
-  <form onSubmit={handleSubmit(onSubmit)}>
-    <CustomInput
-      name='name'
-      errors={errors}
-      label='Product Name'
-      register={register}
-      required={true}
-    />
-    <div>
-      <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Price</label>
-      <Input
-        type='number'
-        step="0.01"
-        min="0"
-        {...register('price', { required: true, valueAsNumber: true })}
-        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-          // Prevent 'e', 'E', '+', '-' characters
-          if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
-            e.preventDefault();
-          }
-        }}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-          // Ensure proper decimal formatting
-          const value = e.target.value;
-          if (value.includes('.')) {
-            const decimalPart = value.split('.')[1];
-            if (decimalPart && decimalPart.length > 2) {
-              // Truncate to 2 decimal places
-              e.currentTarget.value = parseFloat(value).toFixed(2);
-            }
-          }
-        }}
-      />
-      {errors.price && (
-        <div style={{ color: 'red', marginTop: 4 }}>
-          {(errors.price as any)?.message || 'Price is required'}
-        </div>
-      )}
-    </div>
-    <Flex justify='center' style={{ marginTop: '1rem' }}>
-      <Button
-        htmlType='submit'
-        type='primary'
-        style={{ textTransform: 'uppercase', fontWeight: 'bold' }}
-      >
-        Update
-      </Button>
-    </Flex>
-  </form>
-</Modal>
-    </>
-  );
-};
-
-/**
- * Delete Product Modal
+ * Delete Product Modal (kept inline since it's simple)
  */
 const DeleteProductModal = ({ id }: { id: string }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1155,6 +1040,10 @@ const DeleteProductModal = ({ id }: { id: string }) => {
       if (res.statusCode === 200) {
         toastMessage({ icon: 'success', text: res.message });
         handleCancel();
+        // Refresh page after deletion
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       }
     } catch (error: any) {
       handleCancel();

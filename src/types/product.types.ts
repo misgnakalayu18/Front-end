@@ -1,4 +1,3 @@
-// types/product.types.ts
 // In your product.types.ts
 export interface IProduct {
   id?: number;
