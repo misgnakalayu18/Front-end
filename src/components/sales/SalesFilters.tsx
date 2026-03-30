@@ -10,9 +10,11 @@ import {
   Space, 
   Flex, 
   Badge, 
-  Typography 
+  Typography,
+  Tooltip
 } from 'antd';
 import { RangePickerProps } from 'antd/es/date-picker';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
 const { RangePicker } = DatePicker;
@@ -47,7 +49,6 @@ const SalesFilters: React.FC<SalesFiltersProps> = ({
   isMobile = false
 }) => {
   const disabledDate: RangePickerProps['disabledDate'] = (current) => {
-    // Cannot select days after today
     return current && current > dayjs().endOf('day');
   };
 
@@ -86,16 +87,25 @@ const SalesFilters: React.FC<SalesFiltersProps> = ({
       >
         <div style={{ flex: 1, overflow: 'auto' }}>
           <Form.Item
-            label="Search"
+            label={
+              <Space>
+                <span>Search</span>
+                <Tooltip title="Search by buyer name, casher name, or product code">
+                  <InfoCircleOutlined style={{ color: '#999' }} />
+                </Tooltip>
+              </Space>
+            }
             name="search"
           >
             <Input.Search
-              placeholder="Search by product, buyer, code, or casher..."
+              placeholder="Search by buyer, casher, or product code..."
               allowClear
               size={isMobile ? "large" : "middle"}
+              enterButton
             />
           </Form.Item>
 
+          {/* Rest of your form items remain the same */}
           <Form.Item
             label="Payment Status"
             name="paymentStatus"
@@ -159,7 +169,7 @@ const SalesFilters: React.FC<SalesFiltersProps> = ({
                   placeholder="Min"
                   min={0}
                   formatter={(value) => `ETB ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value ? Number(value.replace(/ETB\s?|(,*)/g, '')) : undefined}
+                  parser={(value) => value ? Number(value.replace(/ETB\s?|(,*)/g, '')) : 0}
                   size={isMobile ? "large" : "middle"}
                 />
               </Form.Item>
@@ -172,7 +182,7 @@ const SalesFilters: React.FC<SalesFiltersProps> = ({
                   placeholder="Max"
                   min={0}
                   formatter={(value) => `ETB ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value ? Number(value.replace(/ETB\s?|(,*)/g, '')) : undefined}
+                  parser={(value) => value ? Number(value.replace(/ETB\s?|(,*)/g, '')) : 0}
                   size={isMobile ? "large" : "middle"}
                 />
               </Form.Item>

@@ -7,14 +7,21 @@ import {
   Flex,
   Form,
   Grid,
+  InputNumber,
   Pagination,
   PaginationProps,
+  Select,
   Spin,
-  Tag,
   Typography,
   message,
 } from "antd";
-import { InfoCircleOutlined } from "@ant-design/icons";
+import {
+  DoubleLeftOutlined,
+  DoubleRightOutlined,
+  InfoCircleOutlined,
+  LeftOutlined,
+  RightOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
 
 // Components
@@ -33,10 +40,10 @@ import {
   useGetSplitPaymentDetailsQuery,
   useLazyGetAllSaleNoPaginationQuery,
 } from "../../redux/features/management/saleApi";
-import { SaleRecord } from "../../types/sale.type";
+import { ISaleApiResponse, SaleRecord } from "../../types/sale.type";
 import formatDate from "../../utils/formatDate";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 const { Panel } = Collapse;
 const { useBreakpoint } = Grid;
 
@@ -77,7 +84,6 @@ const SaleManagementPage = () => {
     null,
   );
   const [splitModalVisible, setSplitModalVisible] = useState(false);
-  const [localSearch, setLocalSearch] = useState("");
 
   // API calls
   const {
@@ -88,374 +94,136 @@ const SaleManagementPage = () => {
     refetchOnMountOrArgChange: true,
   });
 
-  const { data: splitPaymentDetails, isLoading: splitDetailsLoading } =
-    useGetSplitPaymentDetailsQuery(selectedSplitSaleId, {
+  const { data: splitPaymentDetails } = useGetSplitPaymentDetailsQuery(
+    selectedSplitSaleId,
+    {
       skip: !selectedSplitSaleId,
-    });
+    },
+  );
 
-  // ✅ REPLACE with lazy query for export
-  const [triggerGetAllSalesNoPagination, { isLoading: isExportLoading }] = 
-    useLazyGetAllSaleNoPaginationQuery();
+  const [triggerGetAllSalesNoPagination] = useLazyGetAllSaleNoPaginationQuery();
 
-  // Data transformation
-  const allTransactions = useMemo(() => {
-    if (!apiData || !apiData.success) return [];
-    const transactions = apiData.data?.sales || [];
-    return Array.isArray(transactions) ? transactions : [];
-  }, [apiData]);
-
+  // Debug logging
   useEffect(() => {
-  console.log("🔍 SEARCH DEBUG:");
-  console.log("Query parameters:", query);
-  console.log("Local search:", localSearch);
-  console.log("API Data:", {
-    hasData: !!apiData,
-    success: apiData?.success,
-    totalItems: apiData?.data?.total,
-    salesCount: apiData?.data?.sales?.length || 0,
-    firstSale: apiData?.data?.sales?.[0] ? {
-      code: apiData.data.sales[0].code,
-      productName: apiData.data.sales[0].product_name,
-      buyerName: apiData.data.sales[0].buyer_name,
-    } : null,
-  });
-  console.log("All table data count:", allTableData.length);
-}, [apiData, query, localSearch]);
-
-// Also add logging to the search handler
-const handleSearch = useCallback((value: string) => {
-  const searchValue = value.trim();
-  console.log("🔍 Search triggered:", {
-    searchValue,
-    previousQuery: query.search,
-  });
-  setLocalSearch(searchValue);
-  setQuery((prev) => ({ ...prev, search: searchValue, page: 1 }));
-}, [query.search]);
-
-  // Function to fetch all filtered data for export
-const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
-  try {
-    setExportLoading(true);
-    
-    // Create query with ALL the same filters but without pagination
-    const exportQuery: QueryParams = {
-      page: 1,
-      limit: 10000, // Large limit to get all records
-      search: query.search,
-      paymentStatus: query.paymentStatus,
-      paymentMethod: query.paymentMethod,
-      startDate: query.startDate,
-      endDate: query.endDate,
-      minAmount: query.minAmount,
-      maxAmount: query.maxAmount,
-    };
-
-    console.log("📤 Exporting filtered data with query:", exportQuery);
-    
-    // ✅ IMPORTANT: Remove undefined values so they don't get sent as empty strings
-    const cleanQuery = Object.fromEntries(
-      Object.entries(exportQuery).filter(([_, v]) => v !== undefined && v !== '')
-    );
-    
-    console.log("📤 Clean query for API:", cleanQuery);
-    
-    const response = await triggerGetAllSalesNoPagination(cleanQuery).unwrap();
-    
-    console.log("📥 Export response:", {
-      success: response?.success,
-      salesCount: response?.data?.sales?.length || 0,
-      total: response?.data?.total
+    console.log("🔍 SEARCH DEBUG:", {
+      query,
+      apiData: {
+        success: apiData?.success,
+        totalItems: apiData?.data?.total,
+        salesCount: apiData?.data?.sales?.length || 0,
+      },
     });
-    
-    if (response?.success) {
-      const allData = response.data?.sales || [];
-      
-      // Map the data using your existing mapping logic
-      const exportData = allData.map((transaction: any, index: number) => {
-        const remainingAmount =
-          transaction.remaining_amount || transaction.remainingAmount || 0;
-        const paymentStatus =
-          transaction.payment_status ||
-          transaction.paymentStatus ||
-          (remainingAmount > 0 ? "PARTIAL" : "FULL");
+  }, [query, apiData]);
 
-        return {
-          key: transaction.id?.toString() || `${index}-${Date.now()}`,
-          id: transaction.id?.toString() || "",
-          code: transaction.code || "N/A",
-          ctn: transaction.ctn || 0,
-          unit: transaction.product?.unit || "PC",
-          productName:
-            transaction.product_name || transaction.productName || "N/A",
-          productPrice:
-            transaction.product_price || transaction.productPrice || 0,
-          sellPrice:
-            transaction.product_price || transaction.productPrice || 0,
-          buyerName: transaction.buyer_name || transaction.buyerName || "N/A",
-          quantity: transaction.quantity || 0,
-          totalPrice: transaction.total_price || transaction.totalPrice || 0,
-          paidAmount: transaction.paid_amount || transaction.paidAmount || 0,
-          remainingAmount,
-          date: transaction.date
-            ? formatDate(transaction.date)
-            : transaction.created_at
-              ? formatDate(transaction.created_at)
-              : "N/A",
-          paymentMethod:
-            transaction.payment_method || transaction.paymentMethod || "CASH",
-          bankName: transaction.bank_name || transaction.bankName,
-          paymentStatus,
-          casherName:
-            transaction.casher_name || transaction.casherName || "N/A",
-          recieverName: transaction.receiver_name || transaction.recieverName,
-          sellerName: transaction.user?.name || "N/A",
-          originalTransaction: transaction,
-          originalDate: transaction.date || transaction.created_at || "",
-          useCustomPrice: transaction.use_custom_price || false,
-          discountPercentage: transaction.discount_percentage || 0,
-          salePriceType: transaction.sale_price_type || "DEFAULT",
-          isNegativeStockSale: transaction.is_negative_stock_sale || false,
-          negativeStockPieces: transaction.negative_stock_pieces || 0,
-          bulkDiscountApplied: transaction.bulk_discount_applied || false,
-          totalDiscountAmount: transaction.total_discount_amount || 0,
-          defaultProductPrice: transaction.default_product_price || 0,
-          customPricePerPiece: transaction.custom_price_per_piece || 0,
-          paymentSplits: (transaction.payment_splits || []).map(
-            (split: any) => ({
-              id: split.id,
-              method: split.payment_method || "CASH",
-              amount: split.amount || 0,
-              percentage: split.percentage || 0,
-              bankName: split.bank_name,
-              senderName: split.sender_name,
-              receiverName: split.receiver_name,
-              telebirrPhone: split.telebirr_phone,
-              telebirrTransactionId: split.telebirr_transaction_id,
-              reference: split.reference,
-              createdAt: split.created_at || new Date().toISOString(),
-            }),
-          ),
-          isSplitPayment:
-            transaction.payment_method === "SPLIT" ||
-            (transaction.payment_splits || []).length > 0,
-        };
-      });
-      
-      setExportLoading(false);
-      message.success(`Preparing ${exportData.length} records for export...`);
-      return exportData;
-    }
-
-    setExportLoading(false);
-    message.warning("No data received from server");
-    return [];
-  } catch (error) {
-    console.error("❌ Error fetching filtered data:", error);
-    message.error("Failed to fetch filtered data for export");
-    setExportLoading(false);
-    return [];
-  }
-};
-
-  // ✅ FIXED: Function to fetch all data (no filters)
-  const fetchAllData = async (): Promise<SaleRecord[]> => {
-  try {
-    setExportLoading(true);
-    
-    // Query with no filters
-    const allDataQuery: QueryParams = {
-      page: 1,
-      limit: 1000000,
-      search: "",
-    };
-
-    console.log("📤 Exporting ALL data...");
-    const response = await triggerGetAllSalesNoPagination(allDataQuery).unwrap();
-    
-    console.log("📥 All data response:", {
-      success: response?.success,
-      salesCount: response?.data?.sales?.length || 0
-    });
-    
-    if (response?.success) {
-      const allData = response.data?.sales || [];
-      
-      // ✅ COPY THE MAPPING LOGIC FROM fetchAllFilteredData
-      const exportData = allData.map((transaction: any, index: number) => {
-        const remainingAmount =
-          transaction.remaining_amount || transaction.remainingAmount || 0;
-        const paymentStatus =
-          transaction.payment_status ||
-          transaction.paymentStatus ||
-          (remainingAmount > 0 ? "PARTIAL" : "FULL");
-
-        return {
-          key: transaction.id?.toString() || `${index}-${Date.now()}`,
-          id: transaction.id?.toString() || "",
-          code: transaction.code || "N/A",
-          ctn: transaction.ctn || 0,
-          unit: transaction.product?.unit || "PC",
-          productName:
-            transaction.product_name || transaction.productName || "N/A",
-          productPrice:
-            transaction.product_price || transaction.productPrice || 0,
-          sellPrice:
-            transaction.product_price || transaction.productPrice || 0,
-          buyerName: transaction.buyer_name || transaction.buyerName || "N/A",
-          quantity: transaction.quantity || 0,
-          totalPrice: transaction.total_price || transaction.totalPrice || 0,
-          paidAmount: transaction.paid_amount || transaction.paidAmount || 0,
-          remainingAmount,
-          date: transaction.date
-            ? formatDate(transaction.date)
-            : transaction.created_at
-              ? formatDate(transaction.created_at)
-              : "N/A",
-          paymentMethod:
-            transaction.payment_method || transaction.paymentMethod || "CASH",
-          bankName: transaction.bank_name || transaction.bankName,
-          paymentStatus,
-          casherName:
-            transaction.casher_name || transaction.casherName || "N/A",
-          recieverName: transaction.receiver_name || transaction.recieverName,
-          sellerName: transaction.user?.name || "N/A",
-          originalTransaction: transaction,
-          originalDate: transaction.date || transaction.created_at || "",
-          useCustomPrice: transaction.use_custom_price || false,
-          discountPercentage: transaction.discount_percentage || 0,
-          salePriceType: transaction.sale_price_type || "DEFAULT",
-          isNegativeStockSale: transaction.is_negative_stock_sale || false,
-          negativeStockPieces: transaction.negative_stock_pieces || 0,
-          bulkDiscountApplied: transaction.bulk_discount_applied || false,
-          totalDiscountAmount: transaction.total_discount_amount || 0,
-          defaultProductPrice: transaction.default_product_price || 0,
-          customPricePerPiece: transaction.custom_price_per_piece || 0,
-          paymentSplits: (transaction.payment_splits || []).map(
-            (split: any) => ({
-              id: split.id,
-              method: split.payment_method || "CASH",
-              amount: split.amount || 0,
-              percentage: split.percentage || 0,
-              bankName: split.bank_name,
-              senderName: split.sender_name,
-              receiverName: split.receiver_name,
-              telebirrPhone: split.telebirr_phone,
-              telebirrTransactionId: split.telebirr_transaction_id,
-              reference: split.reference,
-              createdAt: split.created_at || new Date().toISOString(),
-            }),
-          ),
-          isSplitPayment:
-            transaction.payment_method === "SPLIT" ||
-            (transaction.payment_splits || []).length > 0,
-        };
-      });
-      
-      setExportLoading(false);
-      message.success(`Preparing ${exportData.length} records for export...`);
-      return exportData;
-    }
-
-    setExportLoading(false);
-    message.warning("No data received from server");
-    return [];
-  } catch (error) {
-    console.error("❌ Error fetching all data:", error);
-    message.error("Failed to fetch all data for export");
-    setExportLoading(false);
-    return [];
-  }
-};
-
+  // Transform API data to SaleRecord
   const allTableData: SaleRecord[] = useMemo(() => {
-    return allTransactions.map((transaction: any, index: number) => {
-      // Get remaining amount first
-      const remainingAmount =
-        transaction.remaining_amount || transaction.remainingAmount || 0;
-      const paymentStatus =
-        transaction.payment_status ||
-        transaction.paymentStatus ||
-        (remainingAmount > 0 ? "PARTIAL" : "FULL");
+    if (!apiData?.success) return [];
 
-      // Extract and convert payment splits
-      const paymentSplitsRaw =
-        transaction.payment_splits || transaction.paymentSplits || [];
-      const paymentSplits = paymentSplitsRaw.map((split: any) => ({
+    const transactions = apiData.data?.sales || [];
+    if (!Array.isArray(transactions)) return [];
+
+    return transactions.map((transaction: ISaleApiResponse, index: number) => {
+      // Get receiver name from various possible sources
+      let receiverName = undefined;
+
+      // Check payment details first
+      if (transaction.payments && transaction.payments.length > 0) {
+        for (const payment of transaction.payments) {
+          if (payment.details && Array.isArray(payment.details)) {
+            const receiverDetail = payment.details.find(
+              (d) => d.detail_key === "receiver_name",
+            );
+            if (receiverDetail?.detail_value) {
+              receiverName = receiverDetail.detail_value;
+              break;
+            }
+          }
+        }
+      }
+
+      // Check payment splits
+      if (!receiverName && transaction.payment_splits?.length) {
+        const splitWithReceiver = transaction.payment_splits.find(
+          (split) => split.receiver_name,
+        );
+        if (splitWithReceiver?.receiver_name) {
+          receiverName = splitWithReceiver.receiver_name;
+        }
+      }
+
+      // Use root level receiver_name as fallback
+      if (!receiverName && transaction.receiver_name) {
+        receiverName = transaction.receiver_name;
+      }
+
+      // Map payment splits
+      const paymentSplits = (transaction.payment_splits || []).map((split) => ({
         id: split.id,
-        method: split.payment_method || split.method || "CASH",
-        amount: split.amount || 0,
-        percentage: split.percentage || 0,
-        bankName: split.bank_name || split.bankName,
-        senderName: split.sender_name || split.senderName,
-        receiverName: split.receiver_name || split.receiverName,
-        telebirrPhone: split.telebirr_phone || split.telebirrPhone,
-        telebirrTransactionId:
-          split.telebirr_transaction_id || split.telebirrTransactionId,
+        method: split.payment_method || "CASH",
+        amount: Number(split.amount) || 0,
+        percentage: Number(split.percentage) || 0,
+        bankName: split.bank_name,
+        senderName: split.sender_name,
+        receiverName: split.receiver_name,
+        telebirrPhone: split.telebirr_phone,
+        telebirrTransactionId: split.telebirr_transaction_id,
         reference: split.reference,
-        createdAt:
-          split.created_at || split.createdAt || new Date().toISOString(),
+        createdAt: split.created_at,
       }));
 
-      const isSplitPayment =
-        transaction.payment_method === "SPLIT" ||
-        transaction.paymentMethod === "SPLIT" ||
-        paymentSplits.length > 0;
-
-      // Get the original date - ensure it's always a string
-      const originalDate = transaction.date || transaction.created_at || "";
-
-      // Create the SaleRecord object
-      const saleRecord: SaleRecord = {
-        key: transaction.id?.toString() || `${index}-${Date.now()}`,
+      return {
+        key: transaction.id?.toString() || `${index}`,
         id: transaction.id?.toString() || "",
         code: transaction.code || "N/A",
-        ctn: transaction.ctn || 0,
+        ctn: Number(transaction.ctn) || 0,
         unit: transaction.product?.unit || "PC",
-        productName:
-          transaction.product_name || transaction.productName || "N/A",
-        productPrice:
-          transaction.product_price || transaction.productPrice || 0,
-        sellPrice: transaction.product_price || transaction.productPrice || 0,
-        buyerName: transaction.buyer_name || transaction.buyerName || "N/A",
-        quantity: transaction.quantity || 0,
-        totalPrice: transaction.total_price || transaction.totalPrice || 0,
-        paidAmount: transaction.paid_amount || transaction.paidAmount || 0,
-        remainingAmount,
+        productName: transaction.product_name || "N/A",
+        productPrice: Number(transaction.product_price) || 0,
+        sellPrice: Number(transaction.product_price) || 0,
+        buyerName: transaction.buyer_name || "N/A",
+        quantity: Number(transaction.quantity) || 0,
+        totalPrice: Number(transaction.total_price) || 0,
+        paidAmount: Number(transaction.paid_amount) || 0,
+        remainingAmount: Number(transaction.remaining_amount) || 0,
         date: transaction.date
           ? formatDate(transaction.date)
           : transaction.created_at
             ? formatDate(transaction.created_at)
             : "N/A",
-        paymentMethod:
-          transaction.payment_method || transaction.paymentMethod || "CASH",
-        bankName: transaction.bank_name || transaction.bankName,
-        paymentStatus,
-        casherName: transaction.casher_name || transaction.casherName || "N/A",
-        recieverName: transaction.receiver_name || transaction.recieverName,
+        paymentMethod: transaction.payment_method || "CASH",
+        bankName: transaction.bank_name || undefined,
+        paymentStatus: transaction.payment_status || "FULL",
+        casherName: transaction.casher_name || "N/A",
+        recieverName: receiverName,
         sellerName: transaction.user?.name || "N/A",
         originalTransaction: transaction,
-        originalDate,
-
-        // New fields
+        originalDate: transaction.date || transaction.created_at || "",
         useCustomPrice: transaction.use_custom_price || false,
-        discountPercentage: transaction.discount_percentage || 0,
+        discountPercentage: Number(transaction.discount_percentage) || 0,
         salePriceType: transaction.sale_price_type || "DEFAULT",
         isNegativeStockSale: transaction.is_negative_stock_sale || false,
-        negativeStockPieces: transaction.negative_stock_pieces || 0,
+        negativeStockPieces: Number(transaction.negative_stock_pieces) || 0,
         bulkDiscountApplied: transaction.bulk_discount_applied || false,
-        totalDiscountAmount: transaction.total_discount_amount || 0,
-        defaultProductPrice: transaction.default_product_price || 0,
-        customPricePerPiece: transaction.custom_price_per_piece || 0,
-
-        // Split payment fields
-        paymentSplits,
-        isSplitPayment,
+        totalDiscountAmount: Number(transaction.total_discount_amount) || 0,
+        defaultProductPrice: Number(transaction.default_product_price) || 0,
+        customPricePerPiece: Number(transaction.custom_price_per_piece) || 0,
+        paymentSplits: paymentSplits,
+        isSplitPayment:
+          transaction.payment_method === "SPLIT" || paymentSplits.length > 0,
       };
-
-      return saleRecord;
     });
-  }, [allTransactions]);
+  }, [apiData]);
+
+  // Pagination from API
+  const pagination = useMemo(
+    () => ({
+      total: apiData?.data?.total || 0,
+      page: apiData?.data?.page || query.page,
+      limit: apiData?.data?.limit || query.limit,
+      totalPages: apiData?.data?.pages || 1,
+    }),
+    [apiData, query.page, query.limit],
+  );
 
   // Statistics
   const pageStats = useMemo(
@@ -463,23 +231,14 @@ const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
     [allTableData],
   );
 
-  // Pagination metadata
-  const totalItems = useMemo(() => apiData?.data?.total || 0, [apiData]);
-  const totalPages = useMemo(() => apiData?.data?.pages || 1, [apiData]);
-  const currentPage = useMemo(
-    () => apiData?.data?.page || query.page,
-    [apiData, query.page],
-  );
-
   // Handlers
-  // const handleSearch = useCallback((value: string) => {
-  //   const searchValue = value.trim();
-  //   setLocalSearch(searchValue);
-  //   setQuery((prev) => ({ ...prev, search: searchValue, page: 1 }));
-  // }, []);
+  const handleSearch = useCallback((value: string) => {
+    const searchValue = value.trim();
+    console.log("🔍 Search triggered:", { searchValue });
+    setQuery((prev) => ({ ...prev, search: searchValue, page: 1 }));
+  }, []);
 
   const handleSearchClear = useCallback(() => {
-    setLocalSearch("");
     setQuery((prev) => ({ ...prev, search: "", page: 1 }));
   }, []);
 
@@ -490,10 +249,12 @@ const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
       search: values.search || "",
     };
 
-    if (values.paymentStatus?.length > 0)
+    if (values.paymentStatus?.length) {
       newQuery.paymentStatus = values.paymentStatus.join(",");
-    if (values.paymentMethod?.length > 0)
+    }
+    if (values.paymentMethod?.length) {
       newQuery.paymentMethod = values.paymentMethod.join(",");
+    }
     if (values.dateRange) {
       newQuery.startDate = values.dateRange[0].format("YYYY-MM-DD");
       newQuery.endDate = values.dateRange[1].format("YYYY-MM-DD");
@@ -503,38 +264,31 @@ const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
       newQuery.maxAmount = values.amountRange[1] || undefined;
     }
 
+    console.log("🔍 Applying filters:", newQuery);
     setQuery(newQuery);
     setFilterDrawerVisible(false);
   };
 
   const handleClearAllFilters = () => {
-    setQuery({ page: 1, limit: 10, search: "" });
-    setLocalSearch("");
+    setQuery({ page: 1, limit: query.limit, search: "" });
     filterForm.resetFields();
     setFilterDrawerVisible(false);
   };
 
   const handleRemoveFilter = (filterKey: string) => {
-    setQuery(prev => {
+    setQuery((prev) => {
       const newQuery = { ...prev, page: 1 };
-      
       switch (filterKey) {
-        case 'search':
-          setLocalSearch('');
-          return { ...newQuery, search: '' };
-          
-        case 'paymentStatus':
+        case "search":
+          return { ...newQuery, search: "" };
+        case "paymentStatus":
           return { ...newQuery, paymentStatus: undefined };
-          
-        case 'paymentMethod':
+        case "paymentMethod":
           return { ...newQuery, paymentMethod: undefined };
-          
-        case 'dateRange':
+        case "dateRange":
           return { ...newQuery, startDate: undefined, endDate: undefined };
-          
-        case 'amountRange':
+        case "amountRange":
           return { ...newQuery, minAmount: undefined, maxAmount: undefined };
-          
         default:
           return newQuery;
       }
@@ -543,50 +297,26 @@ const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
 
   // Calculate active filters count
   const calculateActiveFilters = useCallback(() => {
-  let count = 0;
-  
-  if (query.search && query.search.trim() !== '') count++;
-  if (query.paymentStatus && query.paymentStatus.length > 0) count++;
-  if (query.paymentMethod && query.paymentMethod.length > 0) count++;
-  if (query.startDate || query.endDate) count++;
-  if (query.minAmount !== undefined || query.maxAmount !== undefined) count++;
-  
-  console.log("🔍 Active filters count:", count, query); // Add this for debugging
-  return count;
-}, [query]);
+    let count = 0;
+    if (query.search?.trim()) count++;
+    if (query.paymentStatus?.length) count++;
+    if (query.paymentMethod?.length) count++;
+    if (query.startDate || query.endDate) count++;
+    if (query.minAmount !== undefined || query.maxAmount !== undefined) count++;
+    return count;
+  }, [query]);
 
-// Update the useEffect to run whenever query changes
-useEffect(() => {
-  const count = calculateActiveFilters();
-  setActiveFilters(count);
-  console.log("📊 Active filters updated:", count);
-}, [query, calculateActiveFilters]);
+  useEffect(() => {
+    setActiveFilters(calculateActiveFilters());
+  }, [query, calculateActiveFilters]);
 
-  const handleViewSplitPayment = (record: SaleRecord) => {
-    setSelectedSplitSaleId(record.id);
-    setSplitModalVisible(true);
-  };
-
-  const handleCloseSplitModal = () => {
-    setSplitModalVisible(false);
-    setSelectedSplitSaleId(null);
-  };
-
-  const handlePageChange: PaginationProps["onChange"] = (page, pageSize) => {
-    setQuery((prev) => ({ ...prev, page, limit: pageSize }));
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setQuery((prev) => ({ ...prev, page: 1, limit: size }));
-  };
-
-  // Effects
+  // Sync form when drawer opens
   useEffect(() => {
     if (filterDrawerVisible) {
       filterForm.setFieldsValue({
-        search: query.search,
-        paymentStatus: query.paymentStatus ? query.paymentStatus.split(',') : [],
-        paymentMethod: query.paymentMethod ? query.paymentMethod.split(',') : [],
+        search: query.search || "",
+        paymentStatus: query.paymentStatus?.split(",") || [],
+        paymentMethod: query.paymentMethod?.split(",") || [],
         dateRange:
           query.startDate && query.endDate
             ? [dayjs(query.startDate), dayjs(query.endDate)]
@@ -599,227 +329,521 @@ useEffect(() => {
     }
   }, [filterDrawerVisible, query, filterForm]);
 
+  const handleViewSplitPayment = (record: SaleRecord) => {
+    setSelectedSplitSaleId(record.id);
+    setSplitModalVisible(true);
+  };
+
+  const handleCloseSplitModal = () => {
+    setSplitModalVisible(false);
+    setSelectedSplitSaleId(null);
+  };
+
+  const handlePageChange = (page: number, pageSize?: number) => {
+  console.log("🔘 Button clicked - handlePageChange called with:", { 
+    requestedPage: page, 
+    requestedPageSize: pageSize,
+    currentPage: pagination.page,
+    totalPages: pagination.totalPages,
+    isFetching 
+  });
+  
+  // Validate page number
+  if (page < 1) page = 1;
+  if (page > pagination.totalPages) page = pagination.totalPages;
+  
+  // Don't update if page hasn't changed
+  if (page === pagination.page && (!pageSize || pageSize === query.limit)) {
+    console.log("⏭️ Page unchanged, skipping update");
+    return;
+  }
+  
+  console.log("📤 Updating query with:", { page, limit: pageSize || query.limit });
+  setQuery((prev) => ({ 
+    ...prev, 
+    page, 
+    limit: pageSize || prev.limit 
+  }));
+};
+
+  const handlePageSizeChange = (size: number) => {
+    setQuery((prev) => ({ ...prev, page: 1, limit: size }));
+  };
+
   const isMobile = !screens.md;
 
-  // Prepare split modal data
+  // Export functions
+  const fetchAllFilteredData = async (): Promise<SaleRecord[]> => {
+    try {
+      setExportLoading(true);
+
+      const exportQuery: QueryParams = {
+        page: 1,
+        limit: 10000,
+        search: query.search,
+        paymentStatus: query.paymentStatus,
+        paymentMethod: query.paymentMethod,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        minAmount: query.minAmount,
+        maxAmount: query.maxAmount,
+      };
+
+      const cleanQuery = Object.fromEntries(
+        Object.entries(exportQuery).filter(
+          ([_, v]) => v !== undefined && v !== "",
+        ),
+      );
+
+      const response =
+        await triggerGetAllSalesNoPagination(cleanQuery).unwrap();
+
+      if (response?.success) {
+        const allData = response.data?.sales || [];
+
+        // Use the same transformation logic as allTableData
+        const exportData = allData.map(
+          (transaction: ISaleApiResponse, index: number) => {
+            let receiverName = undefined;
+
+            if (transaction.payments?.length) {
+              for (const payment of transaction.payments) {
+                if (payment.details?.length) {
+                  const receiverDetail = payment.details.find(
+                    (d) => d.detail_key === "receiver_name",
+                  );
+                  if (receiverDetail?.detail_value) {
+                    receiverName = receiverDetail.detail_value;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (!receiverName && transaction.payment_splits?.length) {
+              const splitWithReceiver = transaction.payment_splits.find(
+                (split) => split.receiver_name,
+              );
+              if (splitWithReceiver?.receiver_name) {
+                receiverName = splitWithReceiver.receiver_name;
+              }
+            }
+
+            if (!receiverName && transaction.receiver_name) {
+              receiverName = transaction.receiver_name;
+            }
+
+            const paymentSplits = (transaction.payment_splits || []).map(
+              (split) => ({
+                id: split.id,
+                method: split.payment_method || "CASH",
+                amount: Number(split.amount) || 0,
+                percentage: Number(split.percentage) || 0,
+                bankName: split.bank_name,
+                senderName: split.sender_name,
+                receiverName: split.receiver_name,
+                telebirrPhone: split.telebirr_phone,
+                telebirrTransactionId: split.telebirr_transaction_id,
+                reference: split.reference,
+                createdAt: split.created_at,
+              }),
+            );
+
+            return {
+              key: transaction.id?.toString() || `${index}`,
+              id: transaction.id?.toString() || "",
+              code: transaction.code || "N/A",
+              ctn: Number(transaction.ctn) || 0,
+              unit: transaction.product?.unit || "PC",
+              productName: transaction.product_name || "N/A",
+              productPrice: Number(transaction.product_price) || 0,
+              sellPrice: Number(transaction.product_price) || 0,
+              buyerName: transaction.buyer_name || "N/A",
+              quantity: Number(transaction.quantity) || 0,
+              totalPrice: Number(transaction.total_price) || 0,
+              paidAmount: Number(transaction.paid_amount) || 0,
+              remainingAmount: Number(transaction.remaining_amount) || 0,
+              date: transaction.date
+                ? formatDate(transaction.date)
+                : transaction.created_at
+                  ? formatDate(transaction.created_at)
+                  : "N/A",
+              paymentMethod: transaction.payment_method || "CASH",
+              bankName: transaction.bank_name || undefined,
+              paymentStatus: transaction.payment_status || "FULL",
+              casherName: transaction.casher_name || "N/A",
+              recieverName: receiverName,
+              sellerName: transaction.user?.name || "N/A",
+              originalTransaction: transaction,
+              originalDate: transaction.date || transaction.created_at || "",
+              useCustomPrice: transaction.use_custom_price || false,
+              discountPercentage: Number(transaction.discount_percentage) || 0,
+              salePriceType: transaction.sale_price_type || "DEFAULT",
+              isNegativeStockSale: transaction.is_negative_stock_sale || false,
+              negativeStockPieces:
+                Number(transaction.negative_stock_pieces) || 0,
+              bulkDiscountApplied: transaction.bulk_discount_applied || false,
+              totalDiscountAmount:
+                Number(transaction.total_discount_amount) || 0,
+              defaultProductPrice:
+                Number(transaction.default_product_price) || 0,
+              customPricePerPiece:
+                Number(transaction.custom_price_per_piece) || 0,
+              paymentSplits: paymentSplits,
+              isSplitPayment:
+                transaction.payment_method === "SPLIT" ||
+                paymentSplits.length > 0,
+            };
+          },
+        );
+
+        message.success(`Preparing ${exportData.length} records for export...`);
+        return exportData;
+      }
+      return [];
+    } catch (error) {
+      console.error("❌ Export error:", error);
+      message.error("Failed to fetch data for export");
+      return [];
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const fetchAllData = async (): Promise<SaleRecord[]> => {
+    return fetchAllFilteredData();
+  };
+
+  // Split modal data
   const splitModalData = useMemo(() => {
     if (!selectedSplitSaleId) return null;
-    
-    // Try to get from API first
-    if (splitPaymentDetails?.success) {
-      return splitPaymentDetails.data;
-    }
-    
-    // Fallback to local data
-    const localSale = allTableData.find(sale => sale.id === selectedSplitSaleId);
-    if (!localSale) return null;
-
-    return {
-      id: localSale.id,
-      saleId: parseInt(localSale.id) || 0,
-      buyerName: localSale.buyerName,
-      productName: localSale.productName,
-      totalPrice: localSale.totalPrice,
-      date: localSale.originalDate || localSale.date,
-      paymentSplits: localSale.paymentSplits?.map(split => ({
-        id: split.id,
-        method: split.method,
-        amount: split.amount,
-        percentage: split.percentage,
-        bankName: split.bankName,
-        senderName: split.senderName,
-        receiverName: split.receiverName,
-        telebirrPhone: split.telebirrPhone,
-        telebirrTransactionId: split.telebirrTransactionId,
-        reference: split.reference,
-        createdAt: split.createdAt,
-      })) || [],
-      sellerName: localSale.sellerName,
-      paymentStatus: localSale.paymentStatus,
-      productCode: localSale.code,
-      quantity: localSale.quantity,
-    };
+    if (splitPaymentDetails?.success) return splitPaymentDetails.data;
+    return allTableData.find((sale) => sale.id === selectedSplitSaleId) || null;
   }, [selectedSplitSaleId, splitPaymentDetails, allTableData]);
 
   return (
-    <div style={{ padding: isMobile ? "12px" : "16px" }}>
-      {/* Safety Notice */}
-      <Alert
-        message="Sales Data Protection"
-        description="Sale deletion is disabled to protect financial data integrity."
-        type="info"
-        showIcon
-        icon={<InfoCircleOutlined />}
-        style={{ marginBottom: "16px" }}
-      />
+  <div style={{ padding: isMobile ? "12px" : "16px" }}>
+    <Alert
+      message="Sales Data Protection"
+      description="Sale deletion is disabled to protect financial data integrity."
+      type="info"
+      showIcon
+      icon={<InfoCircleOutlined />}
+      style={{ marginBottom: "16px" }}
+    />
 
-      {/* Header */}
-      <SalesHeader
-        activeFilters={activeFilters}
-        exportLoading={exportLoading}
-        hasData={allTableData.length > 0}
-        query={{ ...query, search: localSearch }}
-        onSearch={handleSearch}
-        onSearchClear={handleSearchClear}
-        onFilterClick={() => setFilterDrawerVisible(true)}
-        onExportClick={(info) => {
-          SalesExport.handleExport(
-            info.key,
-            allTableData,
-            query,
-            totalItems,
-            totalPages,
-            fetchAllFilteredData,
-            fetchAllData
-            // setExportLoading removed from here
-          );
-        }}
-        onClearFilters={handleClearAllFilters}
-        onPageSizeChange={handlePageSizeChange}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        showMobileSummary={showMobileSummary}
-        onToggleMobileSummary={() => setShowMobileSummary(!showMobileSummary)}
-        exportItems={SalesExport.getExportMenuItems(allTableData, activeFilters > 0, exportLoading)}
-        isMobile={isMobile}
-      />
-
-      {/* Active Filters */}
-      <ActiveFiltersBar
-        activeFilters={activeFilters}
-        query={query}
-        onRemoveFilter={handleRemoveFilter}
-        onClearAllFilters={handleClearAllFilters}
-        isMobile={isMobile}
-      />
-
-      {/* Mobile Summary */}
-      {isMobile && showMobileSummary && (
-        <Collapse
-          defaultActiveKey={["1"]}
-          style={{ marginBottom: "12px" }}
-          size="small"
-        >
-          <Panel
-            header={
-              <Flex justify="space-between" align="center">
-                <Text strong>Summary (Page {currentPage})</Text>
-                <Text type="secondary" style={{ fontSize: "12px" }}>
-                  Click to expand/collapse
-                </Text>
-              </Flex>
-            }
-            key="1"
-          >
-            <MobileSummary
-              pageStats={pageStats}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              isExpanded={true}
-            />
-          </Panel>
-        </Collapse>
+    <SalesHeader
+      activeFilters={activeFilters}
+      exportLoading={exportLoading}
+      hasData={allTableData.length > 0}
+      query={query}
+      onSearch={handleSearch}
+      onSearchClear={handleSearchClear}
+      onFilterClick={() => setFilterDrawerVisible(true)}
+      onExportClick={(info) => {
+        SalesExport.handleExport(
+          info.key,
+          allTableData,
+          query,
+          pagination.total,
+          pagination.totalPages,
+          fetchAllFilteredData,
+          fetchAllData,
+        );
+      }}
+      onClearFilters={handleClearAllFilters}
+      onPageSizeChange={handlePageSizeChange}
+      currentPage={pagination.page}
+      totalPages={pagination.totalPages}
+      totalItems={pagination.total}
+      showMobileSummary={showMobileSummary}
+      onToggleMobileSummary={() => setShowMobileSummary(!showMobileSummary)}
+      exportItems={SalesExport.getExportMenuItems(
+        allTableData,
+        activeFilters > 0,
+        exportLoading,
       )}
+      isMobile={isMobile}
+    />
 
-      {/* Desktop Stats */}
-      {!isMobile && (
-        <SalesStats
-          pageStats={pageStats}
-          currentPage={currentPage}
-          totalItems={totalItems}
-        />
-      )}
+    <ActiveFiltersBar
+      activeFilters={activeFilters}
+      query={query}
+      onRemoveFilter={handleRemoveFilter}
+      onClearAllFilters={handleClearAllFilters}
+      isMobile={isMobile}
+    />
 
-      {/* Loading/Empty States */}
-      {isFetching && allTableData.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px 24px" }}>
-          <Spin size="large" />
-          <div style={{ marginTop: "16px" }}>Loading transactions...</div>
-        </div>
-      ) : allTableData.length === 0 ? (
-        <Empty
-          description={
-            activeFilters > 0
-              ? "No transactions found with current filters"
-              : "No transactions available"
+    {isMobile && showMobileSummary && (
+      <Collapse
+        defaultActiveKey={["1"]}
+        style={{ marginBottom: "12px" }}
+        size="small"
+      >
+        <Panel
+          header={
+            <Flex justify="space-between" align="center">
+              <Text strong>Summary (Page {pagination.page})</Text>
+              <Text type="secondary" style={{ fontSize: "12px" }}>
+                Click to expand/collapse
+              </Text>
+            </Flex>
           }
-          style={{ padding: "48px 0" }}
+          key="1"
         >
-          {activeFilters > 0 && (
-            <Button type="primary" onClick={handleClearAllFilters}>
-              Clear all filters
-            </Button>
-          )}
-        </Empty>
-      ) : (
-        <>
-          {/* Table */}
-          <SalesTable
-            data={allTableData}
-            loading={isFetching}
-            onViewSplitPayment={handleViewSplitPayment}
-            onRefetch={refetch}
-            onPaymentMethodFilter={(value) =>
-              setQuery((prev) => ({ ...prev, paymentMethod: value, page: 1 }))
-            }
-            onPaymentStatusFilter={(value) =>
-              setQuery((prev) => ({ ...prev, paymentStatus: value, page: 1 }))
-            }
+          <MobileSummary
+            pageStats={pageStats}
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            isExpanded={true}
           />
+        </Panel>
+      </Collapse>
+    )}
 
-          {/* Pagination */}
-          {totalItems > 0 && (
-            <Flex
-              justify="space-between"
-              align="center"
-              style={{ marginTop: "24px" }}
-              wrap={isMobile ? "wrap" : "nowrap"}
-            >
-              <div
-                style={{ color: "#666", fontSize: isMobile ? "12px" : "14px" }}
-              >
-                Showing {allTableData.length} items • Page {currentPage} of{" "}
-                {totalPages}
-              </div>
-              <Pagination
-                current={currentPage}
-                onChange={handlePageChange}
-                total={totalItems}
-                pageSize={query.limit}
-                pageSizeOptions={["10", "25", "50", "100", "500"]}
-                showSizeChanger={!isMobile}
-                showQuickJumper={!isMobile}
-                simple={isMobile}
-                size={isMobile ? "small" : "default"}
-                disabled={isFetching}
+    {!isMobile && (
+      <SalesStats
+        pageStats={pageStats}
+        currentPage={pagination.page}
+        totalItems={pagination.total}
+      />
+    )}
+
+    {isFetching && allTableData.length === 0 ? (
+      <div style={{ textAlign: "center", padding: "48px 24px" }}>
+        <Spin size="large" />
+        <div style={{ marginTop: "16px" }}>Loading transactions...</div>
+      </div>
+    ) : allTableData.length === 0 ? (
+      <Empty
+        description={
+          activeFilters > 0
+            ? "No transactions found with current filters"
+            : "No transactions available"
+        }
+        style={{ padding: "48px 0" }}
+      >
+        {activeFilters > 0 && (
+          <Button type="primary" onClick={handleClearAllFilters}>
+            Clear all filters
+          </Button>
+        )}
+      </Empty>
+    ) : (
+      <>
+        {/* Table */}
+        <SalesTable
+          data={allTableData}
+          loading={isFetching}
+          onViewSplitPayment={handleViewSplitPayment}
+          onRefetch={refetch}
+          onPaymentMethodFilter={(value) =>
+            setQuery((prev) => ({
+              ...prev,
+              paymentMethod: value as string,
+              page: 1,
+            }))
+          }
+          onPaymentStatusFilter={(value) =>
+            setQuery((prev) => ({
+              ...prev,
+              paymentStatus: value as string,
+              page: 1,
+            }))
+          }
+        />
+      </>
+    )}
+
+    {/* Pagination - Only ONE instance, at the bottom */}
+    {!isFetching && allTableData.length > 0 && (
+      <>
+        {/* Desktop Pagination */}
+        {!isMobile && (
+          <Flex
+            justify="space-between"
+            align="center"
+            style={{
+              marginTop: "24px",
+              padding: "16px",
+              backgroundColor: "#fafafa",
+              borderRadius: "8px",
+              border: "1px solid #f0f0f0",
+            }}
+          >
+            <div style={{ color: "#666" }}>
+              Showing <Text strong>{allTableData.length}</Text> of{" "}
+              <Text strong>{pagination.total}</Text> items • Page{" "}
+              <Text strong>{pagination.page}</Text> of{" "}
+              <Text strong>{pagination.totalPages}</Text>
+            </div>
+
+            <Flex gap="middle" align="center">
+              <Flex gap="small" align="center">
+                <span style={{ color: "#666" }}>Rows:</span>
+                <Select
+                  value={query.limit}
+                  onChange={handlePageSizeChange}
+                  style={{ width: 70 }}
+                  size="middle"
+                  options={[
+                    { value: 10, label: "10" },
+                    { value: 25, label: "25" },
+                    { value: 50, label: "50" },
+                    { value: 100, label: "100" },
+                  ]}
+                />
+              </Flex>
+
+              <Flex gap={4} align="center">
+                <Button
+                  icon={<DoubleLeftOutlined />}
+                  onClick={() => handlePageChange(1, query.limit)}
+                  disabled={false}
+                  size="middle"
+                />
+                <Button
+                  icon={<LeftOutlined />}
+                  onClick={() => handlePageChange(pagination.page - 1, query.limit)}
+                  // disabled={pagination.page === 1 || isFetching}
+                  disabled={false}
+                  size="middle"
+                />
+
+                <Flex gap={4} align="center" style={{ margin: "0 8px" }}>
+                  <InputNumber
+                    min={1}
+                    max={pagination.totalPages}
+                    value={pagination.page}
+                    onChange={(value) => value && handlePageChange(value, query.limit)}
+                    disabled={false}
+                    style={{ width: 50, textAlign: "center" }}
+                    size="small"
+                  />
+                  <span>/ {pagination.totalPages}</span>
+                </Flex>
+
+                <Button
+                  icon={<RightOutlined />}
+                  onClick={() => handlePageChange(pagination.page + 1, query.limit)}
+                  //disabled={pagination.page === pagination.totalPages || isFetching}
+                  disabled={false}
+                  size="middle"
+                />
+                <Button
+                  icon={<DoubleRightOutlined />}
+                  onClick={() => handlePageChange(pagination.totalPages, query.limit)}
+                  //disabled={pagination.page === pagination.totalPages || isFetching}
+                  disabled={false}
+                  size="middle"
+                />
+              </Flex>
+            </Flex>
+          </Flex>
+        )}
+
+        {/* Mobile Pagination - ONLY ONE INSTANCE */}
+        {isMobile && (
+          <Flex
+            vertical
+            style={{
+              marginTop: "16px",
+              padding: "16px",
+              backgroundColor: "#fafafa",
+              borderRadius: "8px",
+              border: "1px solid #f0f0f0",
+            }}
+            gap="middle"
+          >
+            <Flex justify="center">
+              <Text style={{ fontSize: "13px", color: "#666" }}>
+                Showing {allTableData.length} of {pagination.total} items • Page {pagination.page} of {pagination.totalPages}
+              </Text>
+            </Flex>
+
+            <Flex justify="center" align="center" gap="small" wrap="wrap">
+              <Button
+                icon={<DoubleLeftOutlined />}
+                onClick={() => handlePageChange(1, query.limit)}
+                disabled={pagination.page === 1 || isFetching}
+                size="small"
+              />
+              <Button
+                icon={<LeftOutlined />}
+                onClick={() => handlePageChange(pagination.page - 1, query.limit)}
+                disabled={pagination.page === 1 || isFetching}
+                size="small"
+              />
+
+              <Flex gap={2} align="center">
+                <InputNumber
+                  min={1}
+                  max={pagination.totalPages}
+                  value={pagination.page}
+                  onChange={(value) => value && handlePageChange(value, query.limit)}
+                  disabled={false}
+                  //disabled={isFetching}
+                  style={{ width: 45, textAlign: "center" }}
+                  size="small"
+                />
+                <Text>/ {pagination.totalPages}</Text>
+              </Flex>
+
+              <Button
+                icon={<RightOutlined />}
+                onClick={() => handlePageChange(pagination.page + 1, query.limit)}
+                disabled={false}
+                //disabled={pagination.page === pagination.totalPages || isFetching}
+                size="small"
+              />
+              <Button
+                icon={<DoubleRightOutlined />}
+                onClick={() => handlePageChange(pagination.totalPages, query.limit)}
+                disabled={false}
+                //disabled={pagination.page === pagination.totalPages || isFetching}
+                size="small"
               />
             </Flex>
-          )}
-        </>
-      )}
 
-      {/* Filter Drawer */}
-      <SalesFilters
-        visible={filterDrawerVisible}
-        onClose={() => setFilterDrawerVisible(false)}
-        form={filterForm}
-        activeFilters={activeFilters}
-        onApplyFilters={handleApplyFilters}
-        onClearAllFilters={handleClearAllFilters}
-        isMobile={isMobile}
-      />
+            <Flex justify="center" align="center" gap="small">
+              <Text style={{ fontSize: "13px", color: "#666" }}>
+                Rows per page:
+              </Text>
+              <Select
+                value={query.limit}
+                onChange={handlePageSizeChange}
+                style={{ width: 65 }}
+                size="small"
+                options={[
+                  { value: 10, label: "10" },
+                  { value: 25, label: "25" },
+                  { value: 50, label: "50" },
+                ]}
+              />
+            </Flex>
+          </Flex>
+        )}
+      </>
+    )}
 
-      {/* Split Payment Modal */}
-      <SplitPaymentModal
-        visible={splitModalVisible}
-        onClose={handleCloseSplitModal}
-        sale={splitModalData}
-        //isLoading={splitDetailsLoading}
-      />
-    </div>
-  );
+    <SalesFilters
+      visible={filterDrawerVisible}
+      onClose={() => setFilterDrawerVisible(false)}
+      form={filterForm}
+      activeFilters={activeFilters}
+      onApplyFilters={handleApplyFilters}
+      onClearAllFilters={handleClearAllFilters}
+      isMobile={isMobile}
+    />
+
+    <SplitPaymentModal
+      visible={splitModalVisible}
+      onClose={handleCloseSplitModal}
+      sale={splitModalData}
+    />
+  </div>
+);
 };
 
 export default SaleManagementPage;

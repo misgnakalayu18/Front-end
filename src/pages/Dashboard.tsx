@@ -1,5 +1,5 @@
 // frontend/src/pages/Dashboard.tsx - Simplified version
-import React from 'react';
+import React from "react";
 import {
   Row,
   Col,
@@ -30,6 +30,7 @@ import DailyChart from "../components/Charts/DailyChart";
 import MonthlyChart from "../components/Charts/MonthlyChart";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 
 const { Text, Title } = Typography;
 const { useBreakpoint } = Grid;
@@ -40,10 +41,12 @@ const CURRENCY = "ETB";
 
 // Format currency helper
 const formatCurrency = (amount: number): string => {
-  return `${CURRENCY} ${amount?.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }) || '0.00'}`;
+  return `${CURRENCY} ${
+    amount?.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) || "0.00"
+  }`;
 };
 
 // Reusable Card Components
@@ -119,12 +122,12 @@ const Dashboard = () => {
   const isMobile = !screens.md;
   const isDesktop = screens.lg;
 
-  const { 
-  data: dashboardData, 
-  isLoading, 
-  error, 
-  refetch 
-} = useGetDashboardStatsQuery({});
+  const {
+    data: dashboardData,
+    isLoading,
+    error,
+    refetch,
+  } = useGetDashboardStatsQuery({});
 
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [chartHeight, setChartHeight] = useState(300);
@@ -307,14 +310,19 @@ const Dashboard = () => {
                   precision={2}
                   prefix={<RiseOutlined />}
                   valueStyle={{
-                    color: stats.periodStats.today.revenue > 0 ? "#52c41a" : "#cf1322",
+                    color:
+                      stats.periodStats.today.revenue > 0
+                        ? "#52c41a"
+                        : "#cf1322",
                     fontSize: isMobile ? "24px" : "28px",
                   }}
                 />
                 <Progress
                   percent={stats.periodStats.today.revenue > 0 ? 100 : 0}
                   size="small"
-                  status={stats.periodStats.today.revenue > 0 ? "success" : "normal"}
+                  status={
+                    stats.periodStats.today.revenue > 0 ? "success" : "normal"
+                  }
                   style={{ marginTop: "12px" }}
                 />
                 <Text
@@ -325,7 +333,8 @@ const Dashboard = () => {
                     marginTop: "8px",
                   }}
                 >
-                  {stats.periodStats.today.sales} sales • {formatCurrency(stats.periodStats.today.revenue)}
+                  {stats.periodStats.today.sales} sales •{" "}
+                  {formatCurrency(stats.periodStats.today.revenue)}
                 </Text>
               </Card>
             </Col>
@@ -343,8 +352,8 @@ const Dashboard = () => {
                       stats.overview.collectionRate > 80
                         ? "#52c41a"
                         : stats.overview.collectionRate > 60
-                        ? "#faad14"
-                        : "#ff4d4f",
+                          ? "#faad14"
+                          : "#ff4d4f",
                     fontSize: isMobile ? "24px" : "28px",
                   }}
                 />
@@ -355,8 +364,8 @@ const Dashboard = () => {
                     stats.overview.collectionRate > 80
                       ? "success"
                       : stats.overview.collectionRate > 60
-                      ? "active"
-                      : "exception"
+                        ? "active"
+                        : "exception"
                   }
                   style={{ marginTop: "12px" }}
                 />
@@ -436,13 +445,15 @@ const Dashboard = () => {
                     type="error"
                     showIcon
                     icon={<WarningOutlined />}
-                    action={
-                      isDesktop && (
-                        <Button size="small" type="primary" danger>
-                          Manage Stock
-                        </Button>
-                      )
-                    }
+                    // action={
+                    //   isDesktop && (
+                    //     <Link to="/products" style={{ display: 'inline-block' }}>
+                    //       <Button size="small" type="primary" danger>
+                    //         Manage Stock
+                    //       </Button>
+                    //     </Link>
+                    //   )
+                    // }
                   />
                 </Col>
               )}
@@ -475,34 +486,39 @@ const Dashboard = () => {
 
           {/* Charts Section */}
           <Row gutter={[16, 16]} style={{ marginBottom: "1.5rem" }}>
-            <Col xs={24} md={12}>
+            {/* Daily Chart - Takes 40% width on desktop */}
+            <Col xs={24} md={10} lg={10}>
               <Card
                 title="Daily Performance"
                 bordered={false}
                 style={{
-                  height: "auto",
-                  minHeight: `${chartHeight + 100}px`,
+                  height: "400px", // Fixed height for both charts
+                  width: "100%",
+                }}
+                bodyStyle={{
+                  height: "calc(100% - 57px)", // Subtract header height
+                  padding: "12px",
                 }}
               >
-                <div style={{ height: chartHeight }}>
-                  <DailyChart />
-                </div>
+                <DailyChart />
               </Card>
             </Col>
 
-            <Col xs={24} md={12}>
+            {/* Monthly Chart - Takes 60% width on desktop (more space for more bars) */}
+            <Col xs={24} md={14} lg={14}>
               <Card
                 title="Monthly Trends"
                 bordered={false}
                 style={{
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
+                  height: "400px", // Same height as daily chart
+                  width: "100%",
+                }}
+                bodyStyle={{
+                  height: "calc(100% - 57px)", // Subtract header height
+                  padding: "12px",
                 }}
               >
-                <div style={{ flex: 1, minHeight: "0" }}>
-                  <MonthlyChart />
-                </div>
+                <MonthlyChart />
               </Card>
             </Col>
           </Row>

@@ -5,6 +5,7 @@ import {
   DatabaseOutlined,
 } from "@ant-design/icons";
 import { SaleRecord } from "../../types/sale.type";
+import * as XLSX from 'xlsx';
 
 // Define the statistics interface
 export interface SalesStats {
@@ -97,7 +98,6 @@ export class SalesExport {
   }
 
   // ========== MAIN EXPORT HANDLER ==========
-  // ✅ FIXED: Removed setExportLoading parameter - now expects 5-7 arguments
   static async handleExport(
     type: string,
     currentData: SaleRecord[],
@@ -119,8 +119,9 @@ export class SalesExport {
 
         case "filtered_data":
           if (fetchAllFilteredData) {
-            message.info("Fetching all filtered sales data...");
+            message.loading({ content: "Fetching all filtered sales data...", key: "export" });
             dataToExport = await fetchAllFilteredData();
+            message.success({ content: `Found ${dataToExport.length} records`, key: "export" });
             exportType = "All Filtered Data";
           } else {
             dataToExport = currentData;
@@ -133,8 +134,9 @@ export class SalesExport {
 
         case "all_data":
           if (fetchAllData) {
-            message.info("Fetching all sales data...");
+            message.loading({ content: "Fetching all sales data...", key: "export" });
             dataToExport = await fetchAllData();
+            message.success({ content: `Found ${dataToExport.length} records`, key: "export" });
             exportType = "All Data";
           } else {
             dataToExport = currentData;
@@ -155,10 +157,14 @@ export class SalesExport {
         return;
       }
 
-      await this.generateExcelFile(dataToExport, query, exportType, totalItems);
-      message.success(
-        `Exported ${dataToExport.length} transactions (${exportType})!`,
-      );
+      // Try Excel export first
+      try {
+        await this.generateExcelFile(dataToExport, query, exportType, totalItems);
+      } catch (excelError) {
+        console.warn("Excel export failed, falling back to CSV:", excelError);
+        // Fall back to CSV
+        await this.generateCSVFallback(dataToExport, query, exportType, totalItems);
+      }
     } catch (error) {
       console.error("Export error:", error);
       message.error("Failed to export data");
@@ -168,45 +174,39 @@ export class SalesExport {
 
   // ========== EXCEL GENERATION ==========
   private static async generateExcelFile(
-  data: SaleRecord[],
-  query: any,
-  exportType: string,
-  totalItems: number,
-): Promise<void> {
-  try {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
+    data: SaleRecord[],
+    query: any,
+    exportType: string,
+    totalItems: number,
+  ): Promise<void> {
+    try {
+      // Create workbook
+      const wb = XLSX.utils.book_new();
 
-    // Create main sales data sheet
-    const exportData = this.prepareExportData(data);
-    const ws = XLSX.utils.json_to_sheet(exportData);
+      // Create main sales data sheet
+      const exportData = this.prepareExportData(data);
+      const ws = XLSX.utils.json_to_sheet(exportData);
 
-    // Set column widths
-    ws["!cols"] = this.getColumnWidths();
-    XLSX.utils.book_append_sheet(wb, ws, "Sales Data");
+      // Set column widths
+      ws["!cols"] = this.getColumnWidths();
+      XLSX.utils.book_append_sheet(wb, ws, "Sales Data");
 
-    // Add summary sheet
-    const summarySheet = this.createSummarySheet(data, query, exportType, totalItems);
-    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+      // Add summary sheet
+      const summarySheet = this.createSummarySheet(data, query, exportType, totalItems);
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
 
-    // ✅ Generate Excel file with .xlsx extension
-    const filename = this.generateFilename(exportType);
-    
-    // Use writeFile with proper options for Excel
-    XLSX.writeFile(wb, filename, { 
-      bookType: 'xlsx', 
-      type: 'binary' 
-    });
-    
-    message.success(`✅ Exported ${data.length} transactions as Excel file!`);
-  } catch (error) {
-    console.error("❌ Excel generation error:", error);
-    message.error("Excel export failed. Trying CSV format...");
-    
-    // Only fallback to CSV if Excel fails
-    await this.generateCSVFallback(data, query, exportType, totalItems);
+      // Generate filename
+      const filename = this.generateFilename(exportType);
+      
+      // Write file
+      XLSX.writeFile(wb, filename);
+      
+      message.success(`✅ Exported ${data.length} transactions as Excel file!`);
+    } catch (error) {
+      console.error("❌ Excel generation error:", error);
+      throw error; // Re-throw to trigger fallback
+    }
   }
-}
 
   // ========== SUMMARY SHEET ==========
   private static createSummarySheet(
@@ -214,9 +214,7 @@ export class SalesExport {
     query: any,
     exportType: string,
     totalItems: number,
-  ): any {
-    const XLSX = require("xlsx");
-    
+  ): XLSX.WorkSheet {
     const stats = this.calculateStats(data);
     const now = new Date();
     
@@ -278,9 +276,24 @@ export class SalesExport {
   ): Promise<void> {
     try {
       const csvContent = this.createCSVContent(data);
-      const filename = `sales_export_${exportType.toLowerCase().replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = this.generateFilename(exportType).replace('.xlsx', '.csv');
 
-      this.downloadFile(csvContent, filename, "text/csv;charset=utf-8;");
+      // Add summary as comments at the top of CSV
+      const stats = this.calculateStats(data);
+      const summary = [
+        `# Export Type: ${exportType}`,
+        `# Date: ${new Date().toLocaleDateString()}`,
+        `# Total Records: ${data.length}`,
+        `# Total Revenue: ETB ${stats.totalRevenue.toLocaleString()}`,
+        `# Total Paid: ETB ${stats.totalPaid.toLocaleString()}`,
+        `# Total Remaining: ETB ${stats.totalRemaining.toLocaleString()}`,
+        `#`,
+        ``,
+        csvContent
+      ].join('\n');
+
+      this.downloadFile(summary, filename, "text/csv;charset=utf-8;");
+      message.success(`✅ Exported ${data.length} transactions as CSV file (Excel format failed, fallback used)`);
     } catch (error) {
       console.error("CSV fallback error:", error);
       throw error;
@@ -351,10 +364,10 @@ export class SalesExport {
       "Transaction ID": item.id,
       "Transaction Code": item.code,
       "Product Name": item.productName,
-      Buyer: item.buyerName,
-      Ctn: item.ctn,
-      Quantity: item.quantity,
-      Unit: item.unit,
+      "Buyer": item.buyerName,
+      "Ctn": item.ctn,
+      "Quantity": item.quantity,
+      "Unit": item.unit,
       "Unit Price": item.productPrice,
       "Total Price": item.totalPrice,
       "Paid Amount": item.paidAmount,
@@ -364,45 +377,53 @@ export class SalesExport {
       "Is Split Payment": item.isSplitPayment ? "Yes" : "No",
       "Bank Name": item.bankName || "",
       "Casher Name": item.casherName,
-      "Receiver Name": item.recieverName || "",
-      Seller: item.sellerName,
+      "Receiver Name": item.recieverName || "", // Fixed: using recieverName
+      "Seller": item.sellerName,
       "Sale Date": item.date,
+      "Split Count": item.paymentSplits?.length || 0,
     }));
   }
 
   private static getColumnWidths(): { wch: number }[] {
     return [
-      { wch: 5 }, // No.
-      { wch: 15 }, // Transaction ID
-      { wch: 20 }, // Transaction Code
-      { wch: 25 }, // Product Name
-      { wch: 20 }, // Buyer
-      { wch: 8 }, // Ctn
-      { wch: 10 }, // Quantity
-      { wch: 8 }, // Unit
-      { wch: 12 }, // Unit Price
-      { wch: 12 }, // Total Price
-      { wch: 12 }, // Paid Amount
-      { wch: 15 }, // Remaining Amount
-      { wch: 12 }, // Payment Status
-      { wch: 15 }, // Payment Method
-      { wch: 15 }, // Is Split Payment
-      { wch: 20 }, // Bank Name
-      { wch: 20 }, // Casher Name
-      { wch: 20 }, // Receiver Name
-      { wch: 20 }, // Seller
-      { wch: 15 }, // Sale Date
+      { wch: 5 },   // No.
+      { wch: 15 },  // Transaction ID
+      { wch: 20 },  // Transaction Code
+      { wch: 30 },  // Product Name
+      { wch: 20 },  // Buyer
+      { wch: 8 },   // Ctn
+      { wch: 10 },  // Quantity
+      { wch: 8 },   // Unit
+      { wch: 15 },  // Unit Price
+      { wch: 15 },  // Total Price
+      { wch: 15 },  // Paid Amount
+      { wch: 15 },  // Remaining Amount
+      { wch: 12 },  // Payment Status
+      { wch: 15 },  // Payment Method
+      { wch: 15 },  // Is Split Payment
+      { wch: 20 },  // Bank Name
+      { wch: 20 },  // Casher Name
+      { wch: 20 },  // Receiver Name
+      { wch: 20 },  // Seller
+      { wch: 15 },  // Sale Date
+      { wch: 10 },  // Split Count
     ];
   }
 
   private static generateFilename(exportType: string): string {
-  const timestamp = new Date().toISOString().split("T")[0].replace(/-/g, "");
-  const typeSlug = exportType.toLowerCase().replace(/ /g, "_");
-  return `sales_${typeSlug}_${timestamp}.xlsx`; // ✅ Ensure .xlsx extension
-}
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    const timestamp = `${year}${month}${day}_${hours}${minutes}`;
+    const typeSlug = exportType.toLowerCase().replace(/ /g, "_");
+    return `sales_${typeSlug}_${timestamp}.xlsx`;
+  }
 
   private static createCSVContent(data: SaleRecord[]): string {
-    // Headers
     const headers = [
       "No.",
       "Transaction ID",
@@ -421,39 +442,37 @@ export class SalesExport {
       "Is Split Payment",
       "Bank Name",
       "Casher Name",
+      "Receiver Name",
       "Seller",
       "Date",
+      "Split Count",
     ];
 
-    let csvContent = headers.join(",") + "\n";
+    const rows = data.map((item, index) => [
+      index + 1,
+      item.id,
+      item.code,
+      `"${item.productName.replace(/"/g, '""')}"`,
+      `"${item.buyerName.replace(/"/g, '""')}"`,
+      item.ctn,
+      item.quantity,
+      item.unit,
+      item.productPrice,
+      item.totalPrice,
+      item.paidAmount,
+      item.remainingAmount,
+      item.paymentStatus,
+      item.paymentMethod,
+      item.isSplitPayment ? "Yes" : "No",
+      item.bankName || "",
+      item.casherName,
+      item.recieverName || "", // Fixed: using recieverName
+      item.sellerName,
+      item.date,
+      item.paymentSplits?.length || 0,
+    ]);
 
-    // Data rows
-    data.forEach((item, index) => {
-      const row = [
-        index + 1,
-        item.id,
-        item.code,
-        `"${item.productName}"`,
-        `"${item.buyerName}"`,
-        item.ctn,
-        item.quantity,
-        item.unit,
-        item.productPrice,
-        item.totalPrice,
-        item.paidAmount,
-        item.remainingAmount,
-        item.paymentStatus,
-        item.paymentMethod,
-        item.isSplitPayment ? "Yes" : "No",
-        item.bankName || "",
-        item.casherName,
-        item.sellerName,
-        item.date,
-      ];
-      csvContent += row.join(",") + "\n";
-    });
-
-    return csvContent;
+    return [headers, ...rows].map(row => row.join(",")).join("\n");
   }
 
   private static downloadFile(

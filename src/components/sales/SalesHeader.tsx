@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   FilterOutlined, 
   ExportOutlined, 
@@ -16,8 +16,7 @@ import {
   Select, 
   Typography,
   Card,
-  Tooltip,
-  Space
+  Tag
 } from 'antd';
 import type { MenuProps } from 'antd';
 
@@ -63,37 +62,23 @@ const SalesHeader: React.FC<SalesHeaderProps> = ({
   exportItems,
   isMobile = false
 }) => {
-  const [localSearch, setLocalSearch] = useState(query.search || '');
-
-  // Handle local search input change
-  const handleLocalSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle search input change - call parent immediately
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setLocalSearch(value);
-    onSearch(value); // Call parent handler immediately or debounced
-  };
-
-  // Handle search button click
-  const handleSearchClick = () => {
-    onSearch(localSearch);
-  };
-
-  // Handle clear
-  const handleClear = () => {
-    setLocalSearch('');
-    onSearchClear();
+    onSearch(value); // Call parent immediately
   };
 
   // Handle Enter key press
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      onSearch(localSearch);
+      onSearch(e.currentTarget.value);
     }
   };
 
   if (isMobile) {
     return (
       <Card size="small" style={{ marginBottom: '12px' }}>
-        <Flex justify="space-between" align="center">
+        <Flex justify="space-between" align="center" wrap="wrap" gap="small">
           <div>
             <Title level={5} style={{ margin: 0 }}>Sales Management</Title>
             <Text type="secondary" style={{ fontSize: '12px' }}>
@@ -132,37 +117,60 @@ const SalesHeader: React.FC<SalesHeaderProps> = ({
         
         <div style={{ marginTop: '12px' }}>
           <Input.Search
-            placeholder="Search sales..."
+            placeholder="Search by buyer, casher, or product code..."
             style={{ width: '100%' }}
-            value={localSearch}
-            onChange={handleLocalSearchChange}
-            onSearch={handleSearchClick}
-            allowClear
-            onClear={handleClear}
+            defaultValue={query.search || ''}
+            onChange={handleSearchChange}
+            onSearch={onSearch}
             onKeyPress={handleKeyPress}
+            allowClear
+            onClear={onSearchClear}
             enterButton={<SearchOutlined />}
             size="small"
           />
+          {query.search && (
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 11 }}>
+              Searching: "<Text mark>{query.search}</Text>"
+            </Text>
+          )}
         </div>
+
+        {activeFilters > 0 && (
+          <Flex justify="flex-end" style={{ marginTop: '8px' }}>
+            <Button
+              type="link"
+              icon={<ClearOutlined />}
+              onClick={onClearFilters}
+              size="small"
+              danger
+            >
+              Clear {activeFilters} filter{activeFilters > 1 ? 's' : ''}
+            </Button>
+          </Flex>
+        )}
       </Card>
     );
   }
 
   return (
     <>
-      <Flex justify="space-between" align="center" style={{ marginBottom: '16px' }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: '16px' }} wrap="wrap" gap="middle">
         <Title level={3} style={{ margin: 0 }}>Sales Management</Title>
-        <Flex gap="small" align="center">
+        <Flex gap="small" align="center" wrap="wrap">
           <Input.Search
-            placeholder="Search by product, buyer, code, or seller..."
-            style={{ width: '300px' }}
-            value={localSearch}
-            onChange={handleLocalSearchChange}
-            onSearch={handleSearchClick}
+            placeholder="Search by buyer, casher, or product code..."
+            style={{ width: '350px' }}
+            defaultValue={query.search || ''}
+            onChange={handleSearchChange}
+            onSearch={onSearch}
             onKeyPress={handleKeyPress}
             allowClear
-            onClear={handleClear}
-            enterButton={<SearchOutlined />}
+            onClear={onSearchClear}
+            enterButton={
+              <Button type="primary" icon={<SearchOutlined />}>
+                Search
+              </Button>
+            }
           />
           <Badge count={activeFilters} size="small">
             <Button
@@ -189,25 +197,26 @@ const SalesHeader: React.FC<SalesHeaderProps> = ({
               icon={<ClearOutlined />}
               onClick={onClearFilters}
               danger
-              size="small"
             >
-              Clear All
+              Clear All ({activeFilters})
             </Button>
           )}
         </Flex>
       </Flex>
 
-      <Flex justify="space-between" align="center" style={{ marginBottom: '16px' }}>
-        <div style={{ fontWeight: 'bold' }}>
-          Page {currentPage} of {totalPages} • {totalItems} total transactions
+      <Flex justify="space-between" align="center" style={{ marginBottom: '16px' }} wrap="wrap" gap="small">
+        <div>
+          <Text strong>
+            Page {currentPage} of {totalPages} • {totalItems} total transactions
+          </Text>
           {query.search && (
-            <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
-              Search: "{query.search}"
-            </span>
+            <Text type="secondary" style={{ marginLeft: 8 }}>
+              Searching: "<Text mark>{query.search}</Text>"
+            </Text>
           )}
         </div>
         <Flex gap="small" align="center">
-          <span style={{ fontSize: '12px', color: '#666' }}>Page Size:</span>
+          <Text type="secondary" style={{ fontSize: '12px' }}>Page Size:</Text>
           <Select
             size="small"
             value={query.limit}

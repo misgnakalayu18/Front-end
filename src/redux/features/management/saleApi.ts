@@ -2,82 +2,63 @@ import { baseApi } from "../baseApi";
 import {
   NormalizedSaleResponse,
   ISaleApiResponse,
+  ISaleApiPaginatedResponse,
+  MonthlyResponse,
+  DailyBreakdownItem,
 } from "../../../types/sale.type";
 
-// ✅ SIMPLIFIED NORMALIZATION - Based on your actual API structure
-const normalizeSaleResponse = (response: any): NormalizedSaleResponse => {
+// ✅ FIXED NORMALIZATION - Based on your actual API response structure
+const normalizeSaleResponse = (response: ISaleApiPaginatedResponse): NormalizedSaleResponse => {
   console.log("🔍 API Response Structure:", {
-    responseSuccess: response?.success,
+    success: response?.success,
+    statusCode: response?.statusCode,
+    message: response?.message,
     hasData: !!response?.data,
-    dataKeys: response?.data ? Object.keys(response.data) : [],
-    hasSales: !!response?.data?.sales,
-    salesCount: Array.isArray(response?.data?.sales)
-      ? response.data.sales.length
-      : 0,
-    hasMeta: !!response?.data?.meta,
+    salesCount: response?.data?.sales?.length || 0,
+    total: response?.data?.total,
+    page: response?.data?.page,
+    pages: response?.data?.pages,
   });
 
-  // ✅ Case 1: response.data.data.sales (Your actual structure)
-  if (response?.data?.data?.sales && Array.isArray(response.data.data.sales)) {
-    const sales = response.data.data.sales as ISaleApiResponse[];
+  // ✅ Case 1: Your exact API response structure
+  if (response?.success && response?.data) {
     return {
-      success: response.success || true,
+      success: response.success,
       data: {
-        sales,
-        total: response.data.data.total || sales.length,
-        page: response.data.data.page || 1,
-        pages:
-          response.data.data.pages ||
-          Math.ceil(sales.length / (response.data.data.limit || 10)),
-        limit: response.data.data.limit || 10,
-      },
-    };
-  }
-
-  // ✅ Case 2: response.data.sales (Simplified structure)
-  else if (response?.data?.sales && Array.isArray(response.data.sales)) {
-    const sales = response.data.sales as ISaleApiResponse[];
-    return {
-      success: response.success || true,
-      data: {
-        sales,
-        total: response.data.total || sales.length,
+        sales: response.data.sales || [],
+        total: response.data.total || 0,
         page: response.data.page || 1,
-        pages:
-          response.data.pages ||
-          Math.ceil(sales.length / (response.data.limit || 10)),
+        pages: response.data.pages || 1,
         limit: response.data.limit || 10,
       },
     };
   }
 
-  // ✅ Case 3: Direct sales array in response.data
-  else if (response?.data && Array.isArray(response.data)) {
-    const sales = response.data as ISaleApiResponse[];
+  // ✅ Case 2: Response with data but different structure
+  else if (response?.data) {
+    const data = response.data as any;
     return {
       success: response.success || true,
       data: {
-        sales,
-        total: sales.length,
-        page: 1,
-        pages: 1,
-        limit: sales.length,
+        sales: data.sales || [],
+        total: data.total || data.sales?.length || 0,
+        page: data.page || 1,
+        pages: data.pages || Math.ceil((data.total || data.sales?.length || 0) / (data.limit || 10)),
+        limit: data.limit || 10,
       },
     };
   }
 
-  // ✅ Case 4: response.sales (Legacy structure)
-  else if (response?.sales && Array.isArray(response.sales)) {
-    const sales = response.sales as ISaleApiResponse[];
+  // ✅ Case 3: Response with sales array directly
+  else if (response && Array.isArray(response)) {
     return {
-      success: response.success || true,
+      success: true,
       data: {
-        sales,
-        total: response.total || sales.length,
-        page: response.page || 1,
-        pages:
-          response.pages || Math.ceil(sales.length / (response.limit || 10)),
-        limit: response.limit || 10,
+        sales: response as ISaleApiResponse[],
+        total: response.length,
+        page: 1,
+        pages: 1,
+        limit: response.length,
       },
     };
   }
@@ -96,6 +77,65 @@ const normalizeSaleResponse = (response: any): NormalizedSaleResponse => {
   };
 };
 
+// ✅ Special normalization for monthly endpoint
+const normalizeMonthlyResponse = (response: any): MonthlyResponse => {
+  console.log("📅 Monthly Response:", response);
+  
+  if (response?.success && response?.data) {
+    // Ensure daily_breakdown is properly typed
+    const dailyBreakdown = (response.data.daily_breakdown || []).map((item: any) => ({
+      sale_date: item.sale_date,
+      day: item.day,
+      transaction_count: item.transaction_count,
+      total_revenue: Number(item.total_revenue) || 0,
+      total_quantity: Number(item.total_quantity) || 0,
+      total_cartons: Number(item.total_cartons) || 0,
+      payment_methods: item.payment_methods || '',
+      split_methods: item.split_methods || '',
+      primary_payment_method: item.primary_payment_method || 'UNKNOWN',
+      average_transaction_value: Number(item.average_transaction_value) || 0,
+    }));
+
+    return {
+      success: true,
+      message: response.message || "Monthly data retrieved successfully",
+      data: {
+        month: response.data.month || '',
+        year: response.data.year || new Date().getFullYear(),
+        monthIndex: response.data.monthIndex || new Date().getMonth() + 1,
+        summary: {
+          total_revenue: Number(response.data.summary?.total_revenue) || 0,
+          total_quantity: Number(response.data.summary?.total_quantity) || 0,
+          total_cartons: Number(response.data.summary?.total_cartons) || 0,
+          total_transactions: Number(response.data.summary?.total_transactions) || 0,
+        },
+        daily_breakdown: dailyBreakdown,
+        payment_methods: response.data.payment_methods || [],
+      }
+    };
+  }
+  
+  // Return empty structure if no data
+  const [year, month] = new Date().toISOString().split('T')[0].split('-');
+  return {
+    success: false,
+    message: "No data available",
+    data: {
+      month: `${year}-${month}`,
+      year: parseInt(year),
+      monthIndex: parseInt(month),
+      summary: {
+        total_revenue: 0,
+        total_quantity: 0,
+        total_cartons: 0,
+        total_transactions: 0
+      },
+      daily_breakdown: [],
+      payment_methods: []
+    }
+  };
+};
+
 const saleApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ==================== SALES CRUD ====================
@@ -106,8 +146,12 @@ const saleApi = baseApi.injectEndpoints({
         params: query,
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: ISaleApiPaginatedResponse) => {
+        console.log("🔍 getAllSale raw response:", response);
+        return normalizeSaleResponse(response);
+      },
     }),
+
     getAllSaleNoPagination: builder.query<NormalizedSaleResponse, any>({
       query: (query) => ({
         url: "/sales",
@@ -119,7 +163,10 @@ const saleApi = baseApi.injectEndpoints({
         },
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: ISaleApiPaginatedResponse) => {
+        console.log("🔍 getAllSaleNoPagination raw response:", response);
+        return normalizeSaleResponse(response);
+      },
     }),
 
     getSaleById: builder.query({
@@ -172,7 +219,7 @@ const saleApi = baseApi.injectEndpoints({
         params,
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: any) => normalizeSaleResponse(response),
     }),
 
     getMonthlyReport: builder.query<NormalizedSaleResponse, any>({
@@ -182,27 +229,67 @@ const saleApi = baseApi.injectEndpoints({
         params,
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: any) => normalizeSaleResponse(response),
     }),
 
-    // ==================== LEGACY ENDPOINTS (Keep for backward compatibility) ====================
+    // ==================== SPLIT PAYMENT ENDPOINTS ====================
+    getSplitPayments: builder.query({
+      query: (params) => ({
+        url: "/sales/split-payments",
+        method: "GET",
+        params,
+      }),
+      providesTags: ["SplitPayment"],
+      transformResponse: (response: any) => {
+        console.log("💰 Split payments response:", response);
+        return response;
+      },
+    }),
+
+    getSplitPaymentDetails: builder.query({
+      query: (saleId) => `/sales/split-payments/${saleId}`,
+      providesTags: (result, error, saleId) => [
+        { type: "SplitPayment", id: saleId },
+      ],
+      transformResponse: (response: any) => {
+        console.log("💰 Split payment details response:", response);
+        return response;
+      },
+    }),
+
+    getSplitPaymentStats: builder.query({
+      query: (params) => ({
+        url: "/sales/split-payments/stats",
+        method: "GET",
+        params,
+      }),
+      transformResponse: (response: any) => {
+        console.log("💰 Split payment stats response:", response);
+        return response;
+      },
+    }),
+
+    // ==================== LEGACY ENDPOINTS ====================
     yearlySale: builder.query({
       query: () => ({
         url: `/sales/yearly-sale`,
         method: "GET",
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: any) => {
+        console.log("📅 Yearly sale response:", response);
+        return response;
+      },
     }),
 
-    monthlySale: builder.query({
+    monthlySale: builder.query<MonthlyResponse, { month: string }>({
       query: (params) => ({
         url: `/sales/monthly`,
         method: "GET",
         params,
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: normalizeMonthlyResponse,
     }),
 
     weeklySale: builder.query({
@@ -213,7 +300,7 @@ const saleApi = baseApi.injectEndpoints({
       }),
       providesTags: ["sale"],
       transformResponse: (response: any) => {
-        console.log("📦 Weekly sale response:", response);
+        console.log("📅 Weekly sale response:", response);
         if (response?.success) {
           return {
             success: true,
@@ -225,61 +312,32 @@ const saleApi = baseApi.injectEndpoints({
     }),
 
     dailySale: builder.query({
-      query: (params) => ({
-        url: `/sales/daily`,
-        method: "GET",
-        params,
-      }),
-      providesTags: ["sale"],
-      transformResponse: (response: any) => {
-        console.log("📦 Daily sale response:", response);
-        if (response?.success) {
-          return {
-            success: true,
-            data: response.data || response,
-          };
-        }
-        return response;
-      },
-    }),
-
-    getSplitPayments: builder.query({
-      query: (params) => ({
-        url: "/sales/split-payments",
-        method: "GET",
-        params,
-      }),
-      providesTags: ["SplitPayment"],
-    }),
-
-    // Get split payment details
-    getSplitPaymentDetails: builder.query({
-      query: (saleId) => `/sales/split-payments/${saleId}`,
-      providesTags: (result, error, saleId) => [
-        { type: "SplitPayment", id: saleId },
-      ],
-    }),
-
-    // Get split payment statistics
-    getSplitPaymentStats: builder.query({
-      query: (params) => ({
-        url: "/sales/split-payments/stats",
-        method: "GET",
-        params,
-      }),
-    }),
+  query: (params) => {
+    console.log('📅 Daily sale API call with params:', params);
+    return {
+      url: `/sales/daily`,
+      method: "GET",
+      params,
+    };
+  },
+  providesTags: ["sale"],
+  transformResponse: (response: any) => {
+    console.log("📅 Daily sale response:", response);
+    return response; // Don't transform, keep original structure
+  },
+}),
 
     getAllSaleForExport: builder.query<NormalizedSaleResponse, any>({
       query: (query) => ({
-        url: "/sales/export", // Separate endpoint optimized for exports
+        url: "/sales/export",
         method: "GET",
         params: {
           ...query,
-          limit: 10000, // Reasonable limit
+          limit: 10000,
         },
       }),
       providesTags: ["sale"],
-      transformResponse: normalizeSaleResponse,
+      transformResponse: (response: any) => normalizeSaleResponse(response),
     }),
   }),
 });
@@ -287,7 +345,7 @@ const saleApi = baseApi.injectEndpoints({
 export const {
   // Core endpoints
   useGetAllSaleQuery,
-  useLazyGetAllSaleNoPaginationQuery, // ✅ Add this line
+  useLazyGetAllSaleNoPaginationQuery,
   useGetAllSaleForExportQuery,
   useLazyGetAllSaleForExportQuery,
   useGetSaleByIdQuery,
@@ -299,18 +357,16 @@ export const {
   useGetSalesReportQuery,
   useGetMonthlyReportQuery,
 
-  // Legacy
-  useYearlySaleQuery,
-  useMonthlySaleQuery,
-  //   // Legacy period queries
-  //   useYearlySaleQuery,
-  //   useMonthlySaleQuery,
-  useWeeklySaleQuery,
-  useDailySaleQuery,
   // Split Payments
   useGetSplitPaymentsQuery,
   useGetSplitPaymentDetailsQuery,
   useGetSplitPaymentStatsQuery,
+
+  // Legacy
+  useYearlySaleQuery,
+  useMonthlySaleQuery,
+  useWeeklySaleQuery,
+  useDailySaleQuery,
 } = saleApi;
 
 export default saleApi;

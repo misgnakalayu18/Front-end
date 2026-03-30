@@ -120,6 +120,66 @@ export interface ISaleApiResponse {
   bulk_discount_applied: boolean;
   minimum_order_for_discount: number | null;
   
+  // ✅ ADD THESE MISSING PROPERTIES
+  payments?: Array<{
+    id: number;
+    sale_id: number;
+    payment_method: string;
+    paid_amount: number;
+    payment_date: string;
+    reference_number: string | null;
+    notes: string | null;
+    created_by: number;
+    created_at: string;
+    details?: Array<{
+      id?: number;
+      payment_id?: number;
+      detail_key: string;
+      detail_value: string | null;
+    }>;
+  }>;
+  
+  payment_splits: Array<{
+    id: number;
+    sale_id: number;
+    payment_method: string;
+    amount: number;
+    percentage: number;
+    bank_name: string | null;
+    sender_name: string | null;
+    receiver_name: string | null;
+    telebirr_phone: string | null;
+    telebirr_transaction_id: string | null;
+    reference: string | null;
+    other_details: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+  
+  pricing?: {
+    id: number;
+    sale_id: number;
+    default_product_price: number;
+    use_custom_price: boolean;
+    custom_price_per_piece: number | null;
+    price_override_reason: string | null;
+    discount_percentage: number | null;
+    total_discount_amount: number;
+    sale_price_type: string;
+    bulk_discount_applied: boolean;
+    minimum_order_for_discount: number | null;
+  } | null;
+  
+  stock_info?: {
+    id: number;
+    sale_id: number;
+    allow_negative_stock: boolean;
+    is_negative_stock_sale: boolean;
+    negative_stock_pieces: number;
+    original_available_stock: number;
+    final_available_stock: number;
+  } | null;
+  
   user: {
     id: number;
     name: string;
@@ -140,7 +200,6 @@ export interface ISaleApiResponse {
     warehouse: string;
     created_at: string;
     updated_at: string;
-    // Add new product fields if needed
     default_price?: number;
     min_sale_price?: number | null;
     max_sale_price?: number | null;
@@ -155,6 +214,7 @@ export interface ISaleApiPaginatedResponse {
   data: {
     sales: ISaleApiResponse[];
     total: number;
+    limit: number;
     page: number;
     pages: number;
   };
@@ -257,6 +317,36 @@ export interface ISaleApiSnakeResponse {
     warehouse: string;
     created_at: string;
     updated_at: string;
+  };
+}
+export interface DailyBreakdownItem {
+  sale_date: string;
+  day: number;
+  transaction_count: string;
+  total_revenue: number;
+  total_quantity: number;
+  total_cartons: number;
+  payment_methods: string;
+  split_methods: string;
+  primary_payment_method: string;
+  average_transaction_value: number;
+}
+
+export interface MonthlyResponse {
+  success: boolean;
+  message: string;
+  data: {
+    month: string;
+    year: number;
+    monthIndex: number;
+    summary: {
+      total_revenue: number;
+      total_quantity: number;
+      total_cartons: number;
+      total_transactions: number;
+    };
+    daily_breakdown: DailyBreakdownItem[];
+    payment_methods: string[];
   };
 }
 

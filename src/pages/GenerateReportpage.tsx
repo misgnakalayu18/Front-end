@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Button, 
   Input, 
@@ -41,6 +41,46 @@ const GenerateReportPage = () => {
   // Using RTK Query mutation
   const [generateReport, { isLoading }] = useGenerateReportMutation();
 
+  // Transform revenueByPaymentMethod object into array for table
+  const revenueByMethodArray = useMemo(() => {
+    if (!reportData?.revenueByPaymentMethod) return [];
+    
+    // Convert object to array
+    return Object.entries(reportData.revenueByPaymentMethod).map(([method, sales]: [string, any]) => {
+      // If it's the new structure (with revenue and count)
+      if (sales.revenue !== undefined && sales.count !== undefined) {
+        return {
+          paymentMethod: method,
+          totalRevenue: sales.revenue,
+          count: sales.count,
+          // Add placeholder values for other columns
+          productName: '-',
+          productPrice: 0,
+          quantity: 0
+        };
+      }
+      
+      // If it's the old structure (array of sales)
+      if (Array.isArray(sales)) {
+        // Aggregate data for this payment method
+        const totalRevenue = sales.reduce((sum, sale) => sum + (sale.revenue || 0), 0);
+        const totalQuantity = sales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
+        const productNames = [...new Set(sales.map(s => s.productName))];
+        
+        return {
+          paymentMethod: method,
+          productName: productNames.join(', '),
+          productPrice: 0,
+          totalRevenue: totalRevenue,
+          quantity: totalQuantity,
+          count: sales.length
+        };
+      }
+      
+      return null;
+    }).filter(Boolean);
+  }, [reportData]);
+
   const handleGenerate = async () => {
     if (!fromDate || !toDate) {
       message.error('Please select both from and to dates.');
@@ -51,7 +91,6 @@ const GenerateReportPage = () => {
       const result = await generateReport({ 
         startDate: fromDate, 
         endDate: toDate,
-        
       }).unwrap();
       
       if (result.success) {
@@ -112,7 +151,7 @@ const GenerateReportPage = () => {
       doc.setFontSize(16);
       doc.text('Revenue by Payment Method', 14, paymentMethodY);
       
-      const paymentMethodData = reportData.revenueByPaymentMethod.map((item: any) => [
+      const paymentMethodData = revenueByMethodArray.map((item: any) => [
         item.paymentMethod,
         item.productName,
         `$${item.productPrice.toFixed(2)}`,
@@ -185,7 +224,7 @@ const GenerateReportPage = () => {
         ['Payment Method', 'Product Name', 'Product Code', 'Product Price', 'Total Revenue', 'Quantity', 'Transaction Count']
       ];
       
-      reportData.revenueByPaymentMethod.forEach((item: any) => {
+      revenueByMethodArray.forEach((item: any) => {
         paymentMethodSheetData.push([
           item.paymentMethod,
           item.productName,
@@ -200,7 +239,7 @@ const GenerateReportPage = () => {
       const paymentMethodSheet = XLSX.utils.aoa_to_sheet(paymentMethodSheetData);
       XLSX.utils.book_append_sheet(workbook, paymentMethodSheet, 'Payment Methods');
       
-      // Detailed Sales sheet with comprehensive information from API response
+      // Detailed Sales sheet
       const detailedSheetData = [
         ['Detailed Sales Transactions'],
         [`Date Range: ${reportData.summary.dateRange.startDate} to ${reportData.summary.dateRange.endDate}`],
@@ -235,9 +274,9 @@ const GenerateReportPage = () => {
           sale.product?.price || 0,
           sale.quantity,
           sale.total_price || sale.totalPrice,
-          sale.paid_amount || sale.paidAmount,
-          sale.remaining_amount || sale.remainingAmount,
-          sale.payment_method || sale.paymentMethod,
+          sale.paidAmount || 0,
+          sale.remainingAmount || 0,
+          sale.paymentMethod || 'UNKNOWN',
           sale.payment_status || sale.paymentStatus,
           sale.buyer_name || sale.buyerName || 'N/A',
           sale.warehouse || sale.product?.warehouse || 'N/A',
@@ -306,8 +345,8 @@ const GenerateReportPage = () => {
         reportData.analytics.topProducts.forEach((product: any, index: number) => {
           topProductsSheetData.push([
             index + 1,
-            product.productName,
-            product.productCode,
+            product.product_name || product.productName,
+            product.code || product.productCode,
             product.totalRevenue,
             product.totalQuantity,
             product.salesCount,
@@ -317,67 +356,6 @@ const GenerateReportPage = () => {
         
         const topProductsSheet = XLSX.utils.aoa_to_sheet(topProductsSheetData);
         XLSX.utils.book_append_sheet(workbook, topProductsSheet, 'Top Products');
-      }
-      
-      // Product Performance sheet - aggregated from detailed sales
-      if (reportData.detailedSales?.length > 0) {
-        const productPerformance: Record<string, any> = {};
-        
-        reportData.detailedSales.forEach((sale: any) => {
-          const productName = sale.product?.name || 'Unknown Product';
-          const productCode = sale.product?.code || 'N/A';
-          const key = `${productName}-${productCode}`;
-          
-          if (!productPerformance[key]) {
-            productPerformance[key] = {
-              productName,
-              productCode,
-              totalRevenue: 0,
-              totalQuantity: 0,
-              salesCount: 0,
-              totalPaid: 0,
-              totalRemaining: 0,
-              warehouses: new Set(),
-              paymentMethods: new Set()
-            };
-          }
-          
-          productPerformance[key].totalRevenue += sale.total_price || sale.totalPrice || 0;
-          productPerformance[key].totalQuantity += sale.quantity || 0;
-          productPerformance[key].salesCount += 1;
-          productPerformance[key].totalPaid += sale.paid_amount || sale.paidAmount || 0;
-          productPerformance[key].totalRemaining += sale.remaining_amount || sale.remainingAmount || 0;
-          
-          if (sale.warehouse) productPerformance[key].warehouses.add(sale.warehouse);
-          if (sale.product?.warehouse) productPerformance[key].warehouses.add(sale.product.warehouse);
-          if (sale.payment_method) productPerformance[key].paymentMethods.add(sale.payment_method);
-          if (sale.paymentMethod) productPerformance[key].paymentMethods.add(sale.paymentMethod);
-        });
-        
-        const productPerformanceSheetData = [
-          ['Product Performance Summary'],
-          [`Date Range: ${reportData.summary.dateRange.startDate} to ${reportData.summary.dateRange.endDate}`],
-          [],
-          ['Product Name', 'Product Code', 'Total Revenue', 'Total Quantity', 'Sales Count', 'Total Paid', 'Total Credit', 'Avg Price', 'Warehouses', 'Payment Methods']
-        ];
-        
-        Object.values(productPerformance).forEach((product: any) => {
-          productPerformanceSheetData.push([
-            product.productName,
-            product.productCode,
-            product.totalRevenue,
-            product.totalQuantity,
-            product.salesCount,
-            product.totalPaid,
-            product.totalRemaining,
-            product.totalQuantity > 0 ? product.totalRevenue / product.totalQuantity : 0,
-            Array.from(product.warehouses).join(', '),
-            Array.from(product.paymentMethods).join(', ')
-          ]);
-        });
-        
-        const productPerformanceSheet = XLSX.utils.aoa_to_sheet(productPerformanceSheetData);
-        XLSX.utils.book_append_sheet(workbook, productPerformanceSheet, 'Product Performance');
       }
       
       // Save the Excel file
@@ -485,7 +463,7 @@ const GenerateReportPage = () => {
       title: 'Payment Method',
       dataIndex: 'paymentMethod',
       key: 'paymentMethod',
-      render: (text: string, record: any) => record.payment_method || record.paymentMethod,
+      render: (text: string, record: any) => record.paymentMethod || 'UNKNOWN',
     },
     {
       title: 'Payment Status',
@@ -711,20 +689,20 @@ const GenerateReportPage = () => {
             </Space>
           </Card>
 
-          {/* Revenue by Payment Method Table */}
+          {/* Revenue by Payment Method Table - NOW USING TRANSFORMED ARRAY */}
           <Card 
             title="📈 Revenue by Payment Method" 
             style={{ marginBottom: '24px' }}
             extra={
               <Text type="secondary">
-                Total Entries: {reportData.metadata?.recordCount?.revenueEntries || reportData.revenueByPaymentMethod?.length || 0}
+                Total Entries: {revenueByMethodArray.length}
               </Text>
             }
           >
             <Table
-              dataSource={reportData.revenueByPaymentMethod}
+              dataSource={revenueByMethodArray}
               columns={columns}
-              rowKey={(record) => `${record.paymentMethod}-${record.productName}-${record.productPrice}`}
+              rowKey={(record) => `${record.paymentMethod}-${record.productName}`}
               pagination={{ 
                 pageSize: 10,
                 showSizeChanger: true,
@@ -811,10 +789,10 @@ const GenerateReportPage = () => {
                             }}
                           >
                             <div>
-                              <Text strong>#{index + 1}. {product.productName}</Text>
+                              <Text strong>#{index + 1}. {product.product_name || product.productName}</Text>
                               <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                  Code: {product.productCode}
+                                  Code: {product.code || product.productCode}
                                 </Text>
                               </div>
                             </div>

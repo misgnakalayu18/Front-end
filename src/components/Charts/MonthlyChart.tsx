@@ -1,9 +1,8 @@
-import { Alert, Tag, Select, Typography, Space, Grid } from 'antd';
+import { Alert } from 'antd';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,252 +12,126 @@ import { useMonthlySaleQuery } from '../../redux/features/management/saleApi';
 import Loader from '../common/Loader';
 import { useState, useMemo } from 'react';
 
-const { Option } = Select;
-const { Text } = Typography;
-const { useBreakpoint } = Grid;
-
-// Define the API response type based on your Sale API
-interface SaleItem {
-  id: number;
-  total_price: number;
-  quantity: number;
-  date: string;
-  product_name: string;
-  buyer_name: string;
-  warehouse: string;
-  payment_method: string;
-  payment_status: string;
-  created_at: string;
+interface DailyBreakdownItem {
+  sale_date: string;
+  day: number;
+  transaction_count: string;
+  total_revenue: number;
+  total_quantity: number;
+  total_cartons: number;
+  payment_methods: string;
+  split_methods: string | null;
+  primary_payment_method: string;
+  average_transaction_value: number;
 }
 
 interface MonthlyResponse {
   success: boolean;
-  message?: string;
+  message: string;
   data: {
-    sales: SaleItem[];
-    total?: number;
-    page?: number;
-    pages?: number;
-    limit?: number;
-    meta?: {
-      userRole?: string;
-      hasFullAccess?: boolean;
-      filteredByUser?: boolean;
-      filteredUserId?: number;
-      currentUserId?: number;
+    month: string;
+    year: number;
+    monthIndex: number;
+    summary: {
+      total_revenue: number;
+      total_quantity: number;
+      total_cartons: number;
+      total_transactions: number;
     };
+    daily_breakdown: DailyBreakdownItem[];
+    payment_methods: string[];
   };
 }
 
-const MonthlyChart = () => {
-  const screens = useBreakpoint();
-  const isMobile = !screens.md;
-  const isTablet = !screens.lg && screens.md;
-  
+export default function MonthlyChart() {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
   
-  // State for year selection
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<string>(
+  const [selectedMonth] = useState<string>(
     `${currentYear}-${currentMonth.toString().padStart(2, '0')}`
   );
   
-  // Fetch monthly data
   const { data: monthlyResponse, isLoading, error, refetch } = 
     useMonthlySaleQuery({ month: selectedMonth });
 
-  // Extract sales data from API response - SIMPLIFIED FOR SALE API
-  const salesData = useMemo(() => {
-    console.log('MonthlyChart - API Response:', monthlyResponse);
-    
-    if (!monthlyResponse?.success) return [];
-    
-    // Sale API returns sales array directly
-    if (Array.isArray(monthlyResponse.data?.sales)) {
-      console.log('MonthlyChart - Found sales:', monthlyResponse.data.sales.length);
-      return monthlyResponse.data.sales;
-    }
-    
-    console.log('MonthlyChart - No sales array found');
-    return [];
-  }, [monthlyResponse]);
-
-  // Generate month options for the current year
-  const monthOptions = useMemo(() => {
-    const months = [];
-    for (let i = 1; i <= 12; i++) {
-      const monthStr = i.toString().padStart(2, '0');
-      months.push({
-        value: `${selectedYear}-${monthStr}`,
-        label: new Date(selectedYear, i - 1).toLocaleString('default', { month: 'short' })
-      });
-    }
-    return months;
-  }, [selectedYear]);
-
-  // Calculate statistics from sales array
-  const statistics = useMemo(() => {
+  // Prepare chart data
+  const chartData = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    if (!salesData.length) {
+    const allDaysData = Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
       return {
-        totalRevenue: 0,
-        totalQuantity: 0,
-        totalSales: 0,
-        averageRevenue: 0,
-        activeDays: 0,
-        daysInMonth: daysInMonth
+        name: day.toString(),
+        day: day,
+        revenue: 0,
+        quantity: 0,
+        salesCount: 0,
+        fullDate: `${selectedMonth}-${day.toString().padStart(2, '0')}`,
+        hasData: false
       };
-    }
-
-    const dailyRevenue: Record<number, number> = {};
-
-    // Initialize counters
-    let totalRevenue = 0;
-    let totalQuantity = 0;
-    let totalSales = 0;
-
-    // Process each sale
-    salesData.forEach((sale: SaleItem) => {
-      if (!sale.date) return;
-      
-      try {
-        const saleDate = new Date(sale.date);
-        if (
-          saleDate.getFullYear() === year && 
-          saleDate.getMonth() + 1 === month
-        ) {
-          const day = saleDate.getDate();
-          dailyRevenue[day] = (dailyRevenue[day] || 0) + (Number(sale.total_price) || 0);
-          
-          // Accumulate totals
-          totalRevenue += Number(sale.total_price) || 0;
-          totalQuantity += Number(sale.quantity) || 0;
-          totalSales += 1;
-        }
-      } catch (error) {
-        console.error('Error processing sale:', error);
-      }
     });
 
-    return {
-      totalRevenue,
-      totalQuantity,
-      totalSales,
-      averageRevenue: totalSales > 0 ? totalRevenue / totalSales : 0,
-      activeDays: Object.keys(dailyRevenue).length,
-      daysInMonth: daysInMonth
-    };
-  }, [salesData, selectedMonth]);
-
-  // Prepare chart data from sales array
-  const chartData = useMemo(() => {
-    console.log('MonthlyChart - Preparing chart data for:', selectedMonth);
-    console.log('MonthlyChart - Sales data count:', salesData.length);
-    
-    if (!salesData.length) {
-      console.log('MonthlyChart - No sales data available');
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      
-      // Return empty data for all days
-      const emptyData = Array.from({ length: daysInMonth }, (_, index) => {
-        const day = index + 1;
-        return {
-          day,
-          date: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`,
-          revenue: 0,
-          quantity: 0,
-          transactionCount: 0,
-          name: isMobile ? day.toString() : `Day ${day}`,
-          label: day.toString(),
-          fullDate: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-        };
-      });
-      
-      console.log('MonthlyChart - Empty chart data generated:', emptyData.length, 'days');
-      return emptyData;
-    }
-
-    try {
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      
-      console.log(`MonthlyChart - Processing ${salesData.length} sales for ${year}-${month}, ${daysInMonth} days`);
-      
-      // Initialize array for all days
-      const dailyData = Array.from({ length: daysInMonth }, (_, index) => {
-        const day = index + 1;
-        return {
-          day,
-          date: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`,
-          revenue: 0,
-          quantity: 0,
-          transactionCount: 0
-        };
-      });
-
-      // Process sales data
-      let processedSales = 0;
-      salesData.forEach((sale: SaleItem) => {
-        if (!sale.date) return;
-        
-        try {
-          const saleDate = new Date(sale.date);
-          if (
-            saleDate.getFullYear() === year && 
-            saleDate.getMonth() + 1 === month
-          ) {
-            const day = saleDate.getDate() - 1;
-            if (day >= 0 && day < dailyData.length) {
-              dailyData[day].revenue += Number(sale.total_price) || 0;
-              dailyData[day].quantity += Number(sale.quantity) || 0;
-              dailyData[day].transactionCount += 1;
-              processedSales++;
-            }
-          }
-        } catch (error) {
-          console.error('Error processing sale for chart:', sale, error);
+    if (monthlyResponse?.success && monthlyResponse?.data?.daily_breakdown) {
+      monthlyResponse.data.daily_breakdown.forEach(item => {
+        const dayIndex = item.day - 1;
+        if (dayIndex >= 0 && dayIndex < allDaysData.length) {
+          allDaysData[dayIndex].revenue = Number(item.total_revenue) || 0;
+          allDaysData[dayIndex].quantity = Number(item.total_quantity) || 0;
+          allDaysData[dayIndex].salesCount = parseInt(item.transaction_count) || 0;
+          allDaysData[dayIndex].hasData = true;
         }
       });
-
-      console.log(`MonthlyChart - Processed ${processedSales} sales into chart data`);
-
-      // Format for chart
-      const result = dailyData.map(dayData => ({
-        ...dayData,
-        name: isMobile ? dayData.day.toString() : `Day ${dayData.day}`,
-        label: dayData.day.toString(),
-        fullDate: dayData.date
-      }));
-      
-      // Check which days have data
-      const daysWithData = result.filter(day => day.revenue > 0);
-      console.log('MonthlyChart - Days with data:', daysWithData.map(d => d.day));
-      console.log('MonthlyChart - Chart data sample:', result.slice(0, 5));
-      
-      return result;
-    } catch (error) {
-      console.error('MonthlyChart - Error preparing chart data:', error);
-      return [];
     }
-  }, [salesData, selectedMonth, isMobile]);
+    
+    return allDaysData;
+  }, [monthlyResponse, selectedMonth]);
 
-  // Debug: Log final chart data
-  console.log('MonthlyChart - Final chartData length:', chartData?.length);
-  console.log('MonthlyChart - Has data:', chartData?.some(day => day.revenue > 0));
-  if (chartData?.some(day => day.revenue > 0)) {
-    const daysWithRevenue = chartData.filter(day => day.revenue > 0);
-    console.log('MonthlyChart - Days with revenue:', daysWithRevenue.map(d => ({ day: d.day, revenue: d.revenue })));
-  }
+  // Calculate totals
+  const totals = useMemo(() => {
+    return chartData.reduce(
+      (acc, day) => ({
+        totalRevenue: acc.totalRevenue + (day.revenue || 0),
+        totalQuantity: acc.totalQuantity + (day.quantity || 0),
+        totalSales: acc.totalSales + (day.salesCount || 0),
+        activeDays: acc.activeDays + (day.hasData ? 1 : 0),
+      }),
+      { totalRevenue: 0, totalQuantity: 0, totalSales: 0, activeDays: 0 }
+    );
+  }, [chartData]);
 
-  // Custom tooltip - FIXED CURRENCY TO ETB
+  // Find max revenue for scaling
+  const maxRevenue = useMemo(() => {
+    return Math.max(...chartData.map(d => d.revenue), 1000);
+  }, [chartData]);
+
+  // Responsive x-axis tick formatter - show more labels on wider monthly chart
+  const xAxisTickFormatter = (value: string) => {
+    const day = parseInt(value);
+    if (!day) return '';
+    
+    const daysInMonth = chartData.length;
+    
+    // Monthly chart has more width, so we can show more labels
+    if (window.innerWidth < 768) {
+      // Mobile: show every 5th day
+      return day % 5 === 0 ? day.toString() : '';
+    } else if (window.innerWidth < 1200) {
+      // Tablet: show every 3rd day
+      return day % 3 === 0 ? day.toString() : '';
+    } else {
+      // Desktop: show every 2nd day
+      return day % 2 === 0 ? day.toString() : '';
+    }
+  };
+
+  // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataItem = payload[0]?.payload;
+      if (!dataItem || dataItem.revenue === 0) return null;
+      
       return (
         <div style={{
           backgroundColor: 'white',
@@ -269,22 +142,18 @@ const MonthlyChart = () => {
           minWidth: '160px',
           fontSize: '12px'
         }}>
-          <p style={{ 
-            margin: '0 0 6px 0', 
-            fontWeight: 'bold', 
-            fontSize: '13px' 
-          }}>
-            {dataItem?.fullDate || `Day ${dataItem?.day}`}
+          <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', fontSize: '13px' }}>
+            {dataItem.fullDate}
           </p>
           <div style={{ lineHeight: '1.4' }}>
-            <p style={{ margin: '3px 0', color: '#1890ff' }}>
-              <strong>Revenue:</strong> ETB {dataItem?.revenue?.toLocaleString()}
+            <p style={{ margin: '3px 0', color: '#8884d8' }}>
+              <strong>Revenue:</strong> ETB {dataItem.revenue?.toLocaleString()}
+            </p>
+            <p style={{ margin: '3px 0', color: '#82ca9d' }}>
+              <strong>Quantity:</strong> {dataItem.quantity?.toLocaleString()} pcs
             </p>
             <p style={{ margin: '3px 0', color: '#666' }}>
-              <strong>Quantity:</strong> {dataItem?.quantity?.toLocaleString()}
-            </p>
-            <p style={{ margin: '3px 0', color: '#666' }}>
-              <strong>Transactions:</strong> {dataItem?.transactionCount}
+              <strong>Sales:</strong> {dataItem.salesCount}
             </p>
           </div>
         </div>
@@ -295,12 +164,7 @@ const MonthlyChart = () => {
 
   if (isLoading) {
     return (
-      <div style={{ 
-        height: '100%', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center' 
-      }}>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader />
       </div>
     );
@@ -309,11 +173,11 @@ const MonthlyChart = () => {
   if (error) {
     return (
       <Alert
-        message="Error Loading Data"
-        description="Failed to load monthly sales data"
+        message="Error Loading Monthly Data"
+        description="There was an error loading the monthly sales chart."
         type="error"
         showIcon
-        style={{ margin: '10px' }}
+        style={{ margin: '20px' }}
         action={
           <button 
             onClick={() => refetch()} 
@@ -333,192 +197,103 @@ const MonthlyChart = () => {
     );
   }
 
-  if (salesData.length === 0) {
+  if (totals.activeDays === 0) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <Alert
-          message="No Sales Data"
-          description={`No sales transactions found for ${selectedMonth}.`}
-          type="info"
-          showIcon
-        />
-      </div>
+      <Alert
+        message="No Monthly Data"
+        description={`No sales data available for ${selectedMonth}.`}
+        type="info"
+        showIcon
+        style={{ margin: '20px' }}
+      />
     );
   }
-
-  const hasData = chartData.some(day => day.revenue > 0);
-  
-  console.log('MonthlyChart - Rendering, hasData:', hasData);
-  
-  if (!hasData) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <Alert
-          message="No Chart Data"
-          description={`No sales data available for ${selectedMonth}.`}
-          type="warning"
-          showIcon
-        />
-      </div>
-    );
-  }
-
-  // Responsive X-axis tick formatter
-  const xAxisTickFormatter = (value: string) => {
-    const day = parseInt(value);
-    const daysInMonth = chartData.length;
-    
-    if (isMobile) {
-      // Show only 1st, middle, and last days on mobile
-      if (day === 1 || day === Math.floor(daysInMonth / 2) || day === daysInMonth) {
-        return day.toString();
-      }
-      return '';
-    } else if (isTablet) {
-      // Show every 5th day on tablet
-      return day % 5 === 0 ? day.toString() : '';
-    } else {
-      // Show every 3rd day on desktop
-      return day % 3 === 0 ? day.toString() : '';
-    }
-  };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header with controls - Compact version */}
+    <div style={{ 
+      height: '100%', 
+      width: '100%',
+      display: 'flex', 
+      flexDirection: 'column'
+    }}>
       <div style={{ 
-        marginBottom: '12px',
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        justifyContent: 'space-between',
-        alignItems: isMobile ? 'stretch' : 'center',
-        gap: '8px'
+        marginBottom: '8px', 
+        fontWeight: 'bold', 
+        fontSize: '14px',
+        textAlign: 'center'
       }}>
-        <Text strong style={{ 
-          fontSize: isMobile ? '14px' : '16px',
-          textAlign: isMobile ? 'center' : 'left'
-        }}>
-          {selectedMonth}
-        </Text>
-        
-        <Space direction={isMobile ? 'vertical' : 'horizontal'} size="small">
-          <Select
-            value={selectedYear}
-            onChange={(year) => {
-              setSelectedYear(year);
-              setSelectedMonth(`${year}-${selectedMonth.split('-')[1]}`);
-            }}
-            style={{ width: isMobile ? '100%' : '90px' }}
-            size="small"
-          >
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map(year => (
-              <Option key={year} value={year}>{year}</Option>
-            ))}
-          </Select>
-          
-          <Select
-            value={selectedMonth}
-            onChange={setSelectedMonth}
-            style={{ width: isMobile ? '100%' : '110px' }}
-            size="small"
-            options={monthOptions}
-          />
-        </Space>
+        {selectedMonth} Daily Sales
       </div>
-
-      {/* Compact Summary Stats - FIXED CURRENCY TO ETB */}
+      
       <div style={{ 
-        marginBottom: '12px',
-        padding: '8px',
-        backgroundColor: '#fafafa',
-        borderRadius: '6px',
-        border: '1px solid #f0f0f0'
+        marginBottom: '8px', 
+        padding: '6px 8px', 
+        backgroundColor: '#f6ffed', 
+        borderRadius: '4px',
+        fontSize: '11px'
       }}>
-        <div style={{ 
-          display: 'flex', 
-          flexWrap: 'wrap',
-          gap: '6px',
-          justifyContent: 'center'
-        }}>
-          <Tag color="blue" style={{ 
-            fontSize: '11px', 
-            padding: '2px 6px',
-            margin: 0
-          }}>
-            ETB {statistics.totalRevenue.toLocaleString()}
-          </Tag>
-          <Tag color="green" style={{ 
-            fontSize: '11px', 
-            padding: '2px 6px',
-            margin: 0
-          }}>
-            {statistics.totalSales} sales
-          </Tag>
-          <Tag color="orange" style={{ 
-            fontSize: '11px', 
-            padding: '2px 6px',
-            margin: 0
-          }}>
-            ETB {statistics.averageRevenue.toFixed(0)} avg
-          </Tag>
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+          <span><strong>Revenue:</strong> ETB {(totals.totalRevenue / 1000000).toFixed(1)}M</span>
+          <span><strong>Qty:</strong> {totals.totalQuantity}</span>
+          <span><strong>Trans:</strong> {totals.totalSales}</span>
+          <span><strong>Active:</strong> {totals.activeDays}/{chartData.length}</span>
         </div>
       </div>
-
+      
       {/* Chart Container */}
-      <div style={{ flex: 1, minHeight: '0' }}>
+      <div style={{ 
+        width: '100%',
+        height: '280px', // Slightly shorter to fit more width
+        backgroundColor: '#ffffff',
+        borderRadius: '4px'
+      }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart 
+          <BarChart
             data={chartData}
             margin={{
-              top: 5,
-              right: 5,
-              left: 0,
-              bottom: 5,
+              top: 10,
+              right: 20,
+              left: 10,
+              bottom: 20,
             }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis 
-              dataKey="label" 
-              fontSize={10}
+              dataKey="name" 
+              fontSize={9}
               tickFormatter={xAxisTickFormatter}
+              interval={0}
               tick={{ fill: '#666' }}
+              angle={-45}
+              textAnchor="end"
+              height={40}
             />
             <YAxis 
-              fontSize={10}
-              tickFormatter={(value) => `ETB ${value.toLocaleString()}`}
-              width={40}
+              fontSize={9}
+              tickFormatter={(value) => {
+                if (value >= 1000000) {
+                  return `${(value / 1000000).toFixed(1)}M`;
+                } else if (value >= 1000) {
+                  return `${(value / 1000).toFixed(0)}k`;
+                }
+                return value.toString();
+              }}
+              width={35}
               tick={{ fill: '#666' }}
+              domain={[0, maxRevenue * 1.1]}
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar 
               dataKey="revenue" 
-              fill="#1890ff" 
-              name="Revenue (ETB)"
+              fill="#8884d8" 
+              name="Revenue"
               radius={[2, 2, 0, 0]}
-              barSize={isMobile ? 10 : 14}
+              barSize={window.innerWidth < 768 ? 6 : window.innerWidth < 1200 ? 8 : 10}
+              isAnimationActive={false}
             />
           </BarChart>
         </ResponsiveContainer>
       </div>
-
-      {/* Legend and Info - FIXED CURRENCY TO ETB */}
-      <div style={{ 
-        marginTop: '8px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: '10px',
-        color: '#666'
-      }}>
-        <span>
-          Active days: {statistics.activeDays}/{statistics.daysInMonth || chartData.length}
-        </span>
-        <span>
-          Total: ETB {statistics.totalRevenue.toLocaleString()}
-        </span>
-      </div>
     </div>
   );
-};
-
-export default MonthlyChart;
+}

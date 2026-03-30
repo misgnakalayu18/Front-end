@@ -21,6 +21,9 @@ dist-final.zip
 dist-final-1.zip
 dist.zip
 dist1.1.zip
+*.zip
+*.tar.gz
+*.tgz   
 
 # Editor directories and files
 .vscode/*

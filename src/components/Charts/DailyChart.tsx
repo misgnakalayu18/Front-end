@@ -12,10 +12,17 @@ import {
 } from 'recharts';
 import { useDailySaleQuery } from '../../redux/features/management/saleApi';
 import Loader from '../common/Loader';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export default function DailyChart() {
-  const todayFormatted = new Date().toISOString().split('T')[0];
+   const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const todayFormatted = `${year}-${month}-${day}`; // This will be "2026-02-26"
+  
+  console.log('DailyChart - Requesting date:', todayFormatted); // Should log "2026-02-26"
+
   const { 
     data: dailyResponse, 
     isFetching: isDailyLoading, 
@@ -25,26 +32,32 @@ export default function DailyChart() {
 
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Get transactions from response
-  const getTransactions = useMemo(() => {
+  // Log the actual response to debug
+  console.log('DailyChart - Full Response:', dailyResponse);
+
+  // Extract transactions correctly from the API response
+  const transactions = useMemo(() => {
     if (!dailyResponse) return [];
-    
-    if (dailyResponse.success && dailyResponse.data && Array.isArray(dailyResponse.data.sales)) {
+
+    // Case 1: Response with success flag and data.sales array (your actual structure)
+    if (dailyResponse.success && dailyResponse.data?.sales && Array.isArray(dailyResponse.data.sales)) {
+      console.log('DailyChart - Found sales:', dailyResponse.data.sales.length);
       return dailyResponse.data.sales;
     }
     
-    if (Array.isArray(dailyResponse?.data?.sales)) {
-      return dailyResponse.data.sales;
-    }
-    
+    // Case 2: Direct array in response
     if (Array.isArray(dailyResponse)) {
       return dailyResponse;
     }
     
+    // Case 3: Response with data that is an array
+    if (dailyResponse.data && Array.isArray(dailyResponse.data)) {
+      return dailyResponse.data;
+    }
+
+    console.log('DailyChart - No sales array found, response structure:', dailyResponse);
     return [];
   }, [dailyResponse]);
-
-  const transactions = getTransactions;
 
   // Aggregate by hour for today's sales
   const chartData = useMemo(() => {
@@ -56,10 +69,15 @@ export default function DailyChart() {
       const hourlyAggregates: { [key: string]: any } = {};
 
       transactions.forEach((sale: any) => {
-        if (!sale.date) return;
+        // Handle different possible date field names
+        const dateStr = sale.date || sale.created_at || sale.sale_date;
+        if (!dateStr) {
+          console.warn('Sale missing date:', sale);
+          return;
+        }
 
         try {
-          const saleDate = new Date(sale.date);
+          const saleDate = new Date(dateStr);
           if (isNaN(saleDate.getTime())) return;
 
           const hour = saleDate.getHours();
@@ -76,11 +94,15 @@ export default function DailyChart() {
             };
           }
 
-          hourlyAggregates[hourKey].totalRevenue += Number(sale.total_price) || 0;
-          hourlyAggregates[hourKey].totalQuantity += Number(sale.quantity) || 0;
+          // Handle different possible price field names
+          const revenue = Number(sale.total_price || sale.totalPrice || sale.total || 0);
+          const quantity = Number(sale.quantity || sale.qty || 0);
+
+          hourlyAggregates[hourKey].totalRevenue += revenue;
+          hourlyAggregates[hourKey].totalQuantity += quantity;
           hourlyAggregates[hourKey].salesCount += 1;
         } catch (error) {
-          console.error('Error processing sale:', error);
+          console.error('Error processing sale:', error, sale);
         }
       });
 
@@ -106,11 +128,15 @@ export default function DailyChart() {
   // Calculate totals for display
   const totals = useMemo(() => {
     return transactions.reduce(
-      (acc, sale) => ({
-        totalRevenue: acc.totalRevenue + (Number(sale.total_price) || 0),
-        totalQuantity: acc.totalQuantity + (Number(sale.quantity) || 0),
-        totalSales: acc.totalSales + 1,
-      }),
+      (acc, sale) => {
+        const revenue = Number(sale.total_price || sale.totalPrice || sale.total || 0);
+        const quantity = Number(sale.quantity || sale.qty || 0);
+        return {
+          totalRevenue: acc.totalRevenue + revenue,
+          totalQuantity: acc.totalQuantity + quantity,
+          totalSales: acc.totalSales + 1,
+        };
+      },
       { totalRevenue: 0, totalQuantity: 0, totalSales: 0 }
     );
   }, [transactions]);
@@ -154,7 +180,7 @@ export default function DailyChart() {
               <strong>Quantity:</strong> {dataItem?.quantity?.toLocaleString()} pcs
             </p>
             <p style={{ margin: '3px 0', color: '#666' }}>
-              <strong>Sales:</strong> {dataItem?.salesCount}
+              <strong>Transactions:</strong> {dataItem?.salesCount}
             </p>
           </div>
         </div>
@@ -172,6 +198,7 @@ export default function DailyChart() {
   }
 
   if (error) {
+    console.error('DailyChart - Error:', error);
     return (
       <Alert
         message="Error Loading Daily Data"
@@ -201,9 +228,23 @@ export default function DailyChart() {
   if (transactions.length === 0) {
     return (
       <Alert
-        message="No Daily Data"
-        description="No sales data available for today."
+        message="No Sales Today"
+        description="No sales data available for today (February 26, 2026)."
         type="info"
+        showIcon
+        style={{ margin: '20px' }}
+      />
+    );
+  }
+
+  // Check if any hour has revenue
+  const hasData = chartData.some(hour => hour.revenue > 0);
+  if (!hasData) {
+    return (
+      <Alert
+        message="No Hourly Data"
+        description="Sales exist but could not be grouped by hour."
+        type="warning"
         showIcon
         style={{ margin: '20px' }}
       />
@@ -218,7 +259,7 @@ export default function DailyChart() {
         fontSize: '14px',
         textAlign: 'center'
       }}>
-        Today's Hourly Sales
+        Today's Hourly Sales  - {todayFormatted}
       </div>
       
       <div style={{ 

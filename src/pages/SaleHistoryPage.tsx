@@ -23,7 +23,7 @@ const SaleHistoryPage = () => {
     useYearlySaleQuery({ year: currentYear });
   
   const { data: monthlyResponse, isFetching: isMonthlyLoading } = 
-    useMonthlySaleQuery({ year: currentYear, month: currentMonth });
+    useMonthlySaleQuery({ month: currentMonth.toString() });
   
   const { data: weeklyResponse, isFetching: isWeeklyLoading } = 
     useWeeklySaleQuery({ year: currentYear, month: currentMonth });
