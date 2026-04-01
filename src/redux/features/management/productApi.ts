@@ -84,33 +84,6 @@ const productApi = baseApi.injectEndpoints({
       invalidatesTags: ['product']
     }),
 
-    // bulkDelete: builder.mutation({
-    //   query: (payload) => ({
-    //     url: '/products/bulk-delete',
-    //     method: 'POST',
-    //     body: payload
-    //   }),
-    //   invalidatesTags: ['product']
-    // }),
-
-    // bulkUpload: builder.mutation({
-    //   query: (formData) => ({
-    //     url: '/upload-products/upload',
-    //     method: 'POST',
-    //     body: formData,
-    //     headers: {},
-    //   }),
-    //   invalidatesTags: ['product']
-    // }),
-
-    // getBulkUploadHistory: builder.query({
-    //   query: () => ({
-    //     url: '/upload-products/history',
-    //     method: 'GET'
-    //   }),
-    //   providesTags: ['bulkUpload']
-    // }),
-
     getLowStockProducts: builder.query({
       query: (threshold?: number) => ({
         url: '/products/low-stock',

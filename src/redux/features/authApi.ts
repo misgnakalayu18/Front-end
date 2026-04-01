@@ -31,7 +31,7 @@ const authApi = baseApi.injectEndpoints({
     changePassword: builder.mutation({
       query: (payload) => ({
         url: '/users/change-password',
-        method: 'POST',
+        method: 'PUT',
         body: payload
       }),
       invalidatesTags: ['user']
@@ -40,7 +40,7 @@ const authApi = baseApi.injectEndpoints({
     updateProfile: builder.mutation({
       query: (payload) => ({
         url: '/users/profile-update',
-        method: 'PATCH',
+        method: 'PUT',
         body: payload
       }),
       invalidatesTags: ['user']

@@ -11,7 +11,6 @@ import {
   Space, 
   Typography, 
   Flex,
-  
 } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { SaleRecord } from '../../types/sale.type';
@@ -24,6 +23,7 @@ interface ColumnsProps {
   onRefetch: () => void;
   onPaymentMethodFilter?: (value: string) => void;
   onPaymentStatusFilter?: (value: string) => void;
+  onBankNameFilter?: (value: string) => void;   // ← NEW
 }
 
 export const getMobileColumns = ({ onViewSplitPayment, onRefetch }: ColumnsProps): TableColumnsType<SaleRecord> => {
@@ -47,6 +47,12 @@ export const getMobileColumns = ({ onViewSplitPayment, onRefetch }: ColumnsProps
               <div style={{ fontSize: '12px', color: '#666' }}>
                 Date: {record.date}
               </div>
+              {/* Show bank name on mobile if present */}
+              {record.bankName && (
+                <div style={{ fontSize: '12px', color: '#666', marginTop: 4 }}>
+                  Bank: <Tag color="blue" style={{ fontSize: '10px' }}><BankOutlined /> {record.bankName}</Tag>
+                </div>
+              )}
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '16px' }}>
@@ -88,11 +94,7 @@ export const getMobileColumns = ({ onViewSplitPayment, onRefetch }: ColumnsProps
               Method: 
               <Tag 
                 color="blue" 
-                style={{ 
-                  marginLeft: '4px', 
-                  fontSize: '10px',
-                  padding: '2px 8px'
-                }}
+                style={{ marginLeft: '4px', fontSize: '10px', padding: '2px 8px' }}
               >
                 {record.paymentMethod}
               </Tag>
@@ -100,10 +102,7 @@ export const getMobileColumns = ({ onViewSplitPayment, onRefetch }: ColumnsProps
             {record.isSplitPayment && (
               <Tag 
                 color="cyan" 
-                style={{ 
-                  fontSize: '10px',
-                  padding: '2px 8px'
-                }}
+                style={{ fontSize: '10px', padding: '2px 8px' }}
                 icon={<ShareAltOutlined />}
               >
                 Split
@@ -139,11 +138,31 @@ export const getMobileColumns = ({ onViewSplitPayment, onRefetch }: ColumnsProps
   ];
 };
 
+// Ethiopian banks for the column filter dropdown
+const BANK_FILTERS = [
+  { text: 'Commercial Bank of Ethiopia', value: 'Commercial Bank of Ethiopia' },
+  { text: 'Bank of Abyssinia',           value: 'Bank of Abyssinia' },
+  { text: 'Awash Bank',                  value: 'Awash Bank' },
+  { text: 'Dashen Bank',                 value: 'Dashen Bank' },
+  { text: 'Wegagen Bank',                value: 'Wegagen Bank' },
+  { text: 'United Bank',                 value: 'United Bank' },
+  { text: 'Nib International Bank',      value: 'Nib International Bank' },
+  { text: 'Cooperative Bank of Oromia',  value: 'Cooperative Bank of Oromia' },
+  { text: 'Lion International Bank',     value: 'Lion International Bank' },
+  { text: 'Oromia International Bank',   value: 'Oromia International Bank' },
+  { text: 'Berhan Bank',                 value: 'Berhan Bank' },
+  { text: 'Abay Bank',                   value: 'Abay Bank' },
+  { text: 'Addis International Bank',    value: 'Addis International Bank' },
+  { text: 'Debub Global Bank',           value: 'Debub Global Bank' },
+  { text: 'Enat Bank',                   value: 'Enat Bank' },
+];
+
 export const getDesktopColumns = ({ 
   onViewSplitPayment, 
   onRefetch, 
   onPaymentMethodFilter, 
-  onPaymentStatusFilter 
+  onPaymentStatusFilter,
+  onBankNameFilter,     // ← NEW
 }: ColumnsProps): TableColumnsType<SaleRecord> => {
   const columns: TableColumnsType<SaleRecord> = [
     {
@@ -191,7 +210,7 @@ export const getDesktopColumns = ({
       dataIndex: 'totalPrice',
       key: 'totalPrice',
       align: 'right' as const,
-      width: 120,
+      width: 130,
       render: (price: number) => (
         <AntText strong style={{ color: '#1890ff' }}>
           ETB {price.toLocaleString()}
@@ -230,16 +249,15 @@ export const getDesktopColumns = ({
       dataIndex: 'paymentMethod',
       key: 'paymentMethod',
       align: 'center' as const,
-      width: 140,
-      render: (method: string, record: SaleRecord) => {
+      width: 150,
+      render: (method: string) => {
         const methodConfig: Record<string, { text: string; color: string; icon?: React.ReactNode }> = {
-          BANK_TRANSFER: { text: 'Bank', color: 'blue', icon: <BankOutlined /> },
-          TELEBIRR: { text: 'Telebirr', color: 'green' },
-          CASH: { text: 'Cash', color: 'orange' },
-          PARTIAL: { text: 'Partial', color: 'purple' },
-          SPLIT: { text: 'Split', color: 'cyan', icon: <ShareAltOutlined /> },
+          BANK_TRANSFER: { text: 'Bank',    color: 'blue',   icon: <BankOutlined /> },
+          TELEBIRR:      { text: 'Telebirr', color: 'green' },
+          CASH:          { text: 'Cash',    color: 'orange' },
+          PARTIAL:       { text: 'Partial', color: 'purple' },
+          SPLIT:         { text: 'Split',   color: 'cyan',   icon: <ShareAltOutlined /> },
         };
-        
         const config = methodConfig[method] || { text: method, color: 'default' };
         return (
           <Tag color={config.color} icon={config.icon}>
@@ -248,12 +266,13 @@ export const getDesktopColumns = ({
         );
       },
       filters: [
-        { text: 'Cash', value: 'CASH' },
-        { text: 'Bank', value: 'BANK_TRANSFER' },
-        { text: 'Telebirr', value: 'TELEBIRR' },
-        { text: 'Split', value: 'SPLIT' },
+        { text: 'Cash',          value: 'CASH' },
+        { text: 'Bank Transfer', value: 'BANK_TRANSFER' },
+        { text: 'Telebirr',      value: 'TELEBIRR' },
+        { text: 'Split',         value: 'SPLIT' },
+        { text: 'Partial',       value: 'PARTIAL' },
       ],
-      onFilter: (value, record) => {
+      onFilter: (value, _record) => {
         onPaymentMethodFilter?.(value as string);
         return true;
       },
@@ -262,7 +281,7 @@ export const getDesktopColumns = ({
       title: 'Split Info',
       key: 'splitInfo',
       align: 'center' as const,
-      width: 140,
+      width: 130,
       render: (_, record: SaleRecord) => {
         if (record.isSplitPayment) {
           return (
@@ -290,23 +309,30 @@ export const getDesktopColumns = ({
       dataIndex: 'bankName',
       key: 'bankName',
       ellipsis: true,
-      width: 150,
-      render: (bankName: string) => bankName || <AntText type="secondary">-</AntText>,
-      sorter: false,
+      width: 180,
+      render: (bankName: string) =>
+    bankName
+      ? <Tag icon={<BankOutlined />} color="blue" style={{ fontSize: '11px' }}>{bankName}</Tag>
+      : <AntText type="secondary">-</AntText>,
+  filters: BANK_FILTERS,
+  filterMultiple: false,
+  onFilter: (value, _record) => {
+    onBankNameFilter?.(value as string);
+    return true;   // let backend do the real filtering
+  },
     },
     {
       title: 'Status',
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
       align: 'center' as const,
-      width: 100,
+      width: 120,
       render: (status: string, record: SaleRecord) => {
         const statusConfig: Record<string, { color: string; text?: string }> = {
-          FULL: { color: 'success', text: 'Paid' },
+          FULL:    { color: 'success', text: 'Paid' },
           PARTIAL: { color: 'warning', text: 'Partial' },
-          PENDING: { color: 'error', text: 'Pending' },
+          PENDING: { color: 'error',   text: 'Pending' },
         };
-        
         const config = statusConfig[status] || { color: 'default', text: status };
         return (
           <Tag color={config.color}>
@@ -316,11 +342,11 @@ export const getDesktopColumns = ({
         );
       },
       filters: [
-        { text: 'Paid', value: 'FULL' },
+        { text: 'Paid',    value: 'FULL' },
         { text: 'Partial', value: 'PARTIAL' },
         { text: 'Pending', value: 'PENDING' },
       ],
-      onFilter: (value, record) => {
+      onFilter: (value, _record) => {
         onPaymentStatusFilter?.(value as string);
         return true;
       },

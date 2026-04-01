@@ -32,15 +32,18 @@ const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
 
   const renderFilterTag = (key: string, label: string, value: any, color: string) => {
     if (!value || (Array.isArray(value) && value.length === 0)) return null;
-    
+
     let displayValue = value;
-    
+
     if (key === 'paymentStatus' || key === 'paymentMethod') {
+      displayValue = Array.isArray(value) ? value.join(', ') : value;
+    } else if (key === 'bankName') {
+      // value is a comma-separated string from query
       displayValue = Array.isArray(value) ? value.join(', ') : value;
     } else if (key === 'startDate' || key === 'endDate') {
       displayValue = formatDate(value);
     }
-    
+
     return (
       <Tag
         key={key}
@@ -63,47 +66,54 @@ const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
   };
 
   const filterTags = [
-    { 
-      key: 'search', 
-      label: 'Search', 
-      value: query.search, 
+    {
+      key: 'search',
+      label: 'Search',
+      value: query.search,
       color: 'blue',
       condition: query.search && query.search.trim() !== ''
     },
-    { 
-      key: 'paymentStatus', 
-      label: 'Status', 
-      value: query.paymentStatus, 
+    {
+      key: 'paymentStatus',
+      label: 'Status',
+      value: query.paymentStatus,
       color: 'green',
       condition: query.paymentStatus && query.paymentStatus.length > 0
     },
-    { 
-      key: 'paymentMethod', 
-      label: 'Method', 
-      value: query.paymentMethod, 
+    {
+      key: 'paymentMethod',
+      label: 'Method',
+      value: query.paymentMethod,
       color: 'orange',
       condition: query.paymentMethod && query.paymentMethod.length > 0
     },
-    { 
-      key: 'dateRange', 
-      label: 'Date Range', 
-      value: `${formatDate(query.startDate)} to ${formatDate(query.endDate)}`, 
+    {
+      key: 'bankName',
+      label: 'Bank',
+      value: query.bankName,
+      color: 'cyan',
+      condition: query.bankName && query.bankName.trim() !== ''
+    },
+    {
+      key: 'dateRange',
+      label: 'Date Range',
+      value: `${formatDate(query.startDate)} to ${formatDate(query.endDate)}`,
       color: 'purple',
       condition: query.startDate || query.endDate
     },
-    { 
-      key: 'amountRange', 
-      label: 'Amount Range', 
-      value: `${query.minAmount ? `ETB ${query.minAmount.toLocaleString()}` : 'Any'} - ${query.maxAmount ? `ETB ${query.maxAmount.toLocaleString()}` : 'Any'}`, 
+    {
+      key: 'amountRange',
+      label: 'Amount Range',
+      value: `${query.minAmount ? `ETB ${query.minAmount.toLocaleString()}` : 'Any'} - ${query.maxAmount ? `ETB ${query.maxAmount.toLocaleString()}` : 'Any'}`,
       color: 'red',
       condition: query.minAmount !== undefined || query.maxAmount !== undefined
     }
   ];
 
   return (
-    <Card 
-      size="small" 
-      style={{ 
+    <Card
+      size="small"
+      style={{
         marginBottom: isMobile ? '12px' : '16px',
         padding: isMobile ? '8px' : '12px',
         backgroundColor: '#fafafa'
@@ -111,27 +121,27 @@ const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
     >
       <Flex justify="space-between" align="center" wrap="wrap" gap="small">
         <Flex gap="small" align="center" wrap="wrap" style={{ flex: 1 }}>
-          <Text 
-            type="secondary" 
-            style={{ 
-              fontSize: '12px', 
+          <Text
+            type="secondary"
+            style={{
+              fontSize: '12px',
               marginRight: '8px',
               marginBottom: '4px'
             }}
           >
             Active Filters:
           </Text>
-          
-          {filterTags.map(filter => 
+
+          {filterTags.map(filter =>
             filter.condition && renderFilterTag(
-              filter.key, 
-              filter.label, 
-              filter.key === 'dateRange' ? filter.value : filter.value, 
+              filter.key,
+              filter.label,
+              filter.key === 'dateRange' ? filter.value : filter.value,
               filter.color
             )
           )}
         </Flex>
-        
+
         <Tooltip title="Clear all filters">
           <Button
             type="text"

@@ -46,6 +46,17 @@ export interface ITableSale {
   totalDiscountAmount?: number;
   defaultProductPrice?: number;
   customPricePerPiece?: number | null;
+  payments?: Array<{
+    id: number;
+    payment_method: string;
+    paid_amount: number;
+    payment_date: string;
+    created_at: string;
+    details?: Array<{
+      detail_key: string;
+      detail_value: string | null;
+    }>;
+  }>;
   paymentSplits?: Array<{
     id: number;
     method: string;
@@ -61,6 +72,11 @@ export interface ITableSale {
   }>;
   isSplitPayment?: boolean;
   
+}
+
+export interface SaleRecord extends ITableSale {
+  // This inherits all properties from ITableSale
+  // paymentSplits is already defined in ITableSale
 }
 
 // API Response type - UPDATED TO MATCH ACTUAL RESPONSE
@@ -213,24 +229,31 @@ export interface ISaleApiPaginatedResponse {
   message: string;
   data: {
     sales: ISaleApiResponse[];
-    total: number;
-    limit: number;
-    page: number;
-    pages: number;
+    pagination: {
+      total: number;
+      page: number;
+      totalPages: number;
+      limit: number;
+    };
+    meta?: {                      // ← ADD THIS - it's optional but present in your API
+      userRole?: string;
+      hasFullAccess?: boolean;
+      filteredByUser?: boolean;
+      filteredUserId?: number;
+      currentUserId?: number;
+    };
   };
-
-  
 }
 
 export interface NormalizedSaleResponse {
   success: boolean;
   data: {
     sales: ISaleApiResponse[];
-    total?: number;
-    page?: number;
-    pages?: number;
-    limit?: number;
-    meta?: {                      // ✅ ADD THIS OPTIONAL META PROPERTY
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+    meta?: {                      // ← ADD THIS
       userRole?: string;
       hasFullAccess?: boolean;
       filteredByUser?: boolean;
@@ -481,11 +504,6 @@ export interface SplitPaymentStatistics {
     amount: number;
     percentage: number;
   }>;
-}
-
-export interface SaleRecord extends ITableSale {
-  // This inherits all properties from ITableSale
-  // paymentSplits is already defined in ITableSale
 }
 
 export interface SplitPaymentApiResponse {

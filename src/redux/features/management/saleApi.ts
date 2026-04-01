@@ -15,50 +15,40 @@ const normalizeSaleResponse = (response: ISaleApiPaginatedResponse): NormalizedS
     message: response?.message,
     hasData: !!response?.data,
     salesCount: response?.data?.sales?.length || 0,
-    total: response?.data?.total,
-    page: response?.data?.page,
-    pages: response?.data?.pages,
+    pagination: response?.data?.pagination,
+    meta: response?.data?.meta,
   });
 
-  // ✅ Case 1: Your exact API response structure
+  // ✅ Your exact API response structure (with pagination object)
   if (response?.success && response?.data) {
+    const sales = response.data.sales || [];
+    const pagination = response.data.pagination;
+    const meta = response.data.meta;
+    
+    if (pagination) {
+      return {
+        success: response.success,
+        data: {
+          sales: sales,
+          total: pagination.total || 0,
+          page: pagination.page || 1,
+          pages: pagination.totalPages || 1,
+          limit: pagination.limit || 10,
+          meta: meta || {}
+        },
+      };
+    }
+    
+    // Fallback to old structure
     return {
       success: response.success,
       data: {
-        sales: response.data.sales || [],
-        total: response.data.total || 0,
-        page: response.data.page || 1,
-        pages: response.data.pages || 1,
-        limit: response.data.limit || 10,
-      },
-    };
-  }
-
-  // ✅ Case 2: Response with data but different structure
-  else if (response?.data) {
-    const data = response.data as any;
-    return {
-      success: response.success || true,
-      data: {
-        sales: data.sales || [],
-        total: data.total || data.sales?.length || 0,
-        page: data.page || 1,
-        pages: data.pages || Math.ceil((data.total || data.sales?.length || 0) / (data.limit || 10)),
-        limit: data.limit || 10,
-      },
-    };
-  }
-
-  // ✅ Case 3: Response with sales array directly
-  else if (response && Array.isArray(response)) {
-    return {
-      success: true,
-      data: {
-        sales: response as ISaleApiResponse[],
-        total: response.length,
-        page: 1,
-        pages: 1,
-        limit: response.length,
+        sales: sales,
+        total: (response.data as any).total || 0,
+        page: (response.data as any).page || 1,
+        pages: (response.data as any).pages || 1,
+        limit: (response.data as any).limit || 10,
+        meta: meta || {}
       },
     };
   }
@@ -73,6 +63,7 @@ const normalizeSaleResponse = (response: ISaleApiPaginatedResponse): NormalizedS
       page: 1,
       pages: 1,
       limit: 10,
+      meta: {}
     },
   };
 };
@@ -148,7 +139,9 @@ const saleApi = baseApi.injectEndpoints({
       providesTags: ["sale"],
       transformResponse: (response: ISaleApiPaginatedResponse) => {
         console.log("🔍 getAllSale raw response:", response);
-        return normalizeSaleResponse(response);
+        const normalized = normalizeSaleResponse(response);
+        console.log("✅ Normalized response:", normalized);
+        return normalized;
       },
     }),
 
@@ -312,20 +305,20 @@ const saleApi = baseApi.injectEndpoints({
     }),
 
     dailySale: builder.query({
-  query: (params) => {
-    console.log('📅 Daily sale API call with params:', params);
-    return {
-      url: `/sales/daily`,
-      method: "GET",
-      params,
-    };
-  },
-  providesTags: ["sale"],
-  transformResponse: (response: any) => {
-    console.log("📅 Daily sale response:", response);
-    return response; // Don't transform, keep original structure
-  },
-}),
+      query: (params) => {
+        console.log('📅 Daily sale API call with params:', params);
+        return {
+          url: `/sales/daily`,
+          method: "GET",
+          params,
+        };
+      },
+      providesTags: ["sale"],
+      transformResponse: (response: any) => {
+        console.log("📅 Daily sale response:", response);
+        return response; // Don't transform, keep original structure
+      },
+    }),
 
     getAllSaleForExport: builder.query<NormalizedSaleResponse, any>({
       query: (query) => ({

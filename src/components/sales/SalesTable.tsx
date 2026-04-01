@@ -13,6 +13,7 @@ interface SalesTableProps {
   onRefetch: () => void;
   onPaymentMethodFilter?: (value: string) => void;
   onPaymentStatusFilter?: (value: string) => void;
+  onBankNameFilter?: (value: string) => void;   // ← NEW
 }
 
 const SalesTable: React.FC<SalesTableProps> = ({
@@ -21,7 +22,8 @@ const SalesTable: React.FC<SalesTableProps> = ({
   onViewSplitPayment,
   onRefetch,
   onPaymentMethodFilter,
-  onPaymentStatusFilter
+  onPaymentStatusFilter,
+  onBankNameFilter,     // ← NEW
 }) => {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -29,8 +31,14 @@ const SalesTable: React.FC<SalesTableProps> = ({
   const columns = useMemo(() => 
     isMobile 
       ? getMobileColumns({ onViewSplitPayment, onRefetch })
-      : getDesktopColumns({ onViewSplitPayment, onRefetch, onPaymentMethodFilter, onPaymentStatusFilter }),
-    [isMobile, onViewSplitPayment, onRefetch, onPaymentMethodFilter, onPaymentStatusFilter]
+      : getDesktopColumns({
+          onViewSplitPayment,
+          onRefetch,
+          onPaymentMethodFilter,
+          onPaymentStatusFilter,
+          onBankNameFilter,     // ← NEW
+        }),
+    [isMobile, onViewSplitPayment, onRefetch, onPaymentMethodFilter, onPaymentStatusFilter, onBankNameFilter]
   );
 
   return (
@@ -41,7 +49,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
         loading={loading}
         pagination={false}
         bordered={!isMobile}
-        size={isMobile ? "middle" : "middle"}
+        size="middle"
         scroll={isMobile ? undefined : { x: 'max-content' }}
         rowClassName={(record) => record.remainingAmount > 0 ? 'partial-payment-row' : ''}
         showHeader={!isMobile}
